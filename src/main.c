@@ -28,10 +28,17 @@
 #include "sense/sense_mouse.h"
 #include "sense/sense_scroll.h"
 #include "sense/sense_windows.h"
+#include "sense/sense_sysload.h"
+#include "sense/sense_luma.h"
+#include "sense/sense_heatmap.h"
 #include "body/palette.h"
 #include "body/voice_synth.h"
+#include "body/audio_out.h"
 #include "mind/workspace.h"
 #include "lang/lexicon.h"
+#include "behavior/behavior_dmn.h"
+#include "behavior/behavior_bond.h"
+#include "behavior/behavior_explore.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -139,22 +146,62 @@ int main(void) {
     SenseMouse              sense_mouse;
     SenseScroll             sense_scroll;
     SenseWindows            sense_windows;
+    SenseSysload            sense_sysload;
+    SenseHeatmap            sense_heatmap;
     Neuromodulators         neuromod;
     CentralPatternGenerator cpg;
     TemporalPredictor       predictor;
     GlobalWorkspace         workspace;
     Lexicon                 lexicon;
     VoiceSynth              voice;
+    BehaviorDmn             dmn;
+    BehaviorBond            bond;
+    BehaviorExplore         explore;
 
     sense_mouse_init(&sense_mouse);
     sense_scroll_init(&sense_scroll);
     sense_windows_init(&sense_windows);
+    sense_sysload_init(&sense_sysload);
     neuromod_init(&neuromod);
     cpg_init(&cpg);
     predict_init(&predictor);
     workspace_init(&workspace);
     lexicon_init(&lexicon);
     voice_synth_init(&voice, 16000);
+    behavior_dmn_init(&dmn);
+    behavior_bond_init(&bond);
+    behavior_explore_init(&explore);
+
+    /* ── Luma precisa de Display*, criado dinamicamente ── */
+    SenseLuma *sense_luma = NULL;
+#if defined(__linux__) && !defined(_WIN32)
+    {
+        /* Inclui X11 apenas no bloco guardado — evita exposição do tipo Display
+         * ao compilador do main.c que não inclui Xlib diretamente */
+        void *dpy2 = NULL;
+        unsigned long root2 = 0;
+        {
+            /* x11_get_display retorna struct _XDisplay* (opaco fora de Xlib),
+             * mas sense_luma_create o aceita como void* */
+            extern void *x11_get_display(void);
+            extern unsigned long x11_get_root(void);
+            dpy2  = x11_get_display();
+            root2 = x11_get_root();
+        }
+        if (dpy2) sense_luma = sense_luma_create(dpy2, root2);
+    }
+#endif
+
+    /* ── Mapa de calor: dimensões da tela ── */
+    {
+        int wa_x, wa_y, wa_w, wa_h;
+        window_get_workarea(&wa_x, &wa_y, &wa_w, &wa_h);
+        sense_heatmap_init(&sense_heatmap, wa_w > 0 ? wa_w : 1920,
+                                           wa_h > 0 ? wa_h : 1080);
+    }
+
+    /* ── Áudio (Fix 1) ── */
+    audio_out_init(16000);
 
     /* ── animação, soft-body e emoções reativas ── */
     AnimState anim;
@@ -209,8 +256,61 @@ int main(void) {
         /* ══════════════════════════════════════════════════
          * CAMADA 1: Percepção SO Avançada & Sensores
          * ══════════════════════════════════════════════════ */
-        sense_mouse_update(&sense_mouse, cursor_x, cursor_y, pet_x, pet_y, 40);
+
+        /* Fix 2: centro real do pet (janela 192×144, centro = +96, +72) */
+        int pet_cx = pet_x + WINDOW_W / 2;
+        int pet_cy = pet_y + WINDOW_H / 2;
+        sense_mouse_update(&sense_mouse, cursor_x, cursor_y, pet_cx, pet_cy, 48);
+
+        /* Fix 3: scroll wheel */
+        {
+            int wheel = window_get_wheel(win);
+            if (wheel != 0) {
+                sense_scroll_register(&sense_scroll, wheel);
+            }
+        }
         sense_scroll_step(&sense_scroll);
+
+        /* Fix 4: janela ativa — detecção de zona de perigo e troca de foco */
+        {
+            int aw_x, aw_y, aw_ww, aw_hh;
+            uint64_t aw_id = 0;
+            if (window_get_active_window_rect(win, &aw_x, &aw_y, &aw_ww, &aw_hh, &aw_id)) {
+                sense_windows_update(&sense_windows, aw_id,
+                                     aw_x, aw_y, aw_ww, aw_hh);
+                if (sense_windows_did_switch_focus(&sense_windows)) {
+                    neuromod_inject_ne(&neuromod, fix_from_float(0.05f));
+                    softbody_jiggle(&sb, 0.18f);
+                }
+            }
+        }
+
+        /* Heatmap do cursor */
+        sense_heatmap_register(&sense_heatmap, cursor_x, cursor_y);
+        sense_heatmap_decay(&sense_heatmap, t_now);
+
+        /* Carga do sistema */
+        if (sense_sysload_update(&sense_sysload, t_now)) {
+            fix16_t cpu_load = sense_sysload_get_cpu(&sense_sysload);
+            fix16_t cpu_temp = sense_sysload_get_temp(&sense_sysload);
+            /* CPU quente → calor ambiental → cortisol leve */
+            if (cpu_temp > fix_from_float(0.65f)) {
+                neuromod_inject_cort(&neuromod, fix_from_float(0.01f));
+            }
+            /* CPU sobrecarregada → pet sente "aperto" */
+            if (cpu_load > fix_from_float(0.8f)) {
+                softbody_squish(&sb, 0.05f);
+            }
+        }
+
+        /* Luminosidade sob o pet */
+        if (sense_luma) {
+            fix16_t luma = sense_luma_sample(sense_luma, pet_cx, pet_cy, 16);
+            /* Escuro embaixo → dormência mais provável */
+            if (luma < fix_from_float(0.2f)) {
+                neuromod_inject_ser(&neuromod, fix_from_float(0.005f));
+            }
+        }
 
         /* Detecção de quina perigosa (botão fechar) */
         if (sense_windows_is_near_danger_zone(&sense_windows, pet_x, pet_y, 45)) {
@@ -225,6 +325,8 @@ int main(void) {
             neuromod_inject_ser(&neuromod, fix_from_float(0.02f));
             workspace_submit_candidate(&workspace, STIMULUS_MOUSE_TOUCH, fix_from_float(1.2f), current_tick);
             drives.affection = (drives.affection < 0.98) ? (drives.affection + 0.005) : 1.0;
+            behavior_bond_on_gentle_touch(&bond);
+            behavior_dmn_signal_activity(&dmn, t_now);
         }
 
         /* Reflexo Nociceptivo Espinhal (Sacudida violenta) */
@@ -236,6 +338,8 @@ int main(void) {
             workspace_submit_candidate(&workspace, STIMULUS_VIOLENT_SHAKE, fix_from_float(2.5f), current_tick);
             lexicon_observe_word(&lexicon, "susto", fix_from_float(-0.9f), fix_from_float(0.9f), 2);
             drives.stress = (drives.stress < 0.95) ? (drives.stress + 0.15) : 1.0;
+            behavior_bond_on_shake(&bond);
+            behavior_dmn_signal_activity(&dmn, t_now);
         }
 
         /* Colisão com borda */
@@ -251,6 +355,8 @@ int main(void) {
             if (reward_da > 0) {
                 neuromod_inject_da(&neuromod, reward_da);
             }
+            behavior_dmn_signal_activity(&dmn, t_now);
+            behavior_bond_on_gentle_touch(&bond);
         }
 
         /* Predição Temporal: Mismatch Spikes (Surpresa) */
@@ -266,6 +372,7 @@ int main(void) {
         char key;
         while ((key = window_read_char(win)) != 0) {
             sensors_register_key(sensors, key, sim_t);
+            behavior_dmn_signal_activity(&dmn, t_now);
 
             switch (key) {
             case KEY_SPACE:
@@ -416,6 +523,49 @@ int main(void) {
 
         /* ── Geração do buffer de áudio procedural ── */
         voice_synth_render(&voice, voice_pcm, 512);
+        /* Fix 1: envia amostras para o dispositivo de áudio real */
+        if (audio_out_is_open()) {
+            audio_out_write(voice_pcm, 512);
+        }
+
+        /* ── DMN (Default Mode Network) — comportamentos ociosos espontâneos ── */
+        {
+            fix16_t arousal_dmn = sat_add16(neuromod.da, neuromod.ne);
+            DmnState dmn_state = behavior_dmn_update(&dmn, t_now, arousal_dmn, 15.0);
+            switch (dmn_state) {
+            case DMN_YAWN:
+                softbody_stretch(&sb, 0.04f);
+                break;
+            case DMN_GROOMING:
+                softbody_jiggle(&sb, 0.06f);
+                break;
+            case DMN_MICRO_CHIRP:
+                voice_synth_trigger(&voice, VOICE_CHIRP, 0.08f);
+                break;
+            case DMN_LOOK_AROUND:
+                softbody_jiggle(&sb, 0.03f);
+                break;
+            default:
+                break;
+            }
+        }
+
+        /* ── Bond — atualiza vínculo de longo prazo ── */
+        behavior_bond_update(&bond, t_now, dt);
+
+        /* Bond: saudade → pede atenção com som */
+        if (behavior_bond_is_longing(&bond) && (current_tick % 300 == 0)) {
+            voice_synth_trigger(&voice, VOICE_CHIRP, 0.12f);
+            softbody_jiggle(&sb, 0.05f);
+        }
+
+        /* ── Exploração territorial (a cada 60 frames) ── */
+        if (current_tick % 60 == 0) {
+            behavior_explore_update_home(&explore, &sense_heatmap);
+            fix16_t curiosity = neuromod.da;
+            behavior_explore_update(&explore, &sense_heatmap,
+                                    pet_x, pet_y, curiosity, t_now);
+        }
 
         /* ── Animação e Renderização ── */
         anim_sync_brain(&anim, brain, &drives, &emotion);
@@ -441,6 +591,8 @@ int main(void) {
 
     sensors_close(sensors);
     brain_destroy(brain);
+    audio_out_close();
+    if (sense_luma) sense_luma_destroy(sense_luma);
     window_destroy(win);
     return 0;
 }

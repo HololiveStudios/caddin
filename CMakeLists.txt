@@ -12,10 +12,13 @@ if(WIN32)
         user32
         gdi32
         msimg32
+        winmm
         m
     )
 else()
     find_package(X11 REQUIRED)
+    # Detecta ALSA no Linux
+    find_library(ALSA_LIB asound)
     set(PLATFORM_SRCS
         src/platform/window_x11.c
         src/platform/x11_cursor.c
@@ -24,7 +27,15 @@ else()
         ${X11_LIBRARIES}
         ${X11_Xext_LIB}
         m
+        pthread
     )
+    if(ALSA_LIB)
+        list(APPEND PLATFORM_LIBS ${ALSA_LIB})
+        add_compile_definitions(HAVE_ALSA)
+        message(STATUS "[AUDIO] ALSA encontrada: ${ALSA_LIB}")
+    else()
+        message(WARNING "[AUDIO] ALSA não encontrada — áudio silencioso.")
+    endif()
 endif()
 
 set(CORE_SRCS
@@ -37,10 +48,17 @@ set(CORE_SRCS
     src/sense/sense_mouse.c
     src/sense/sense_scroll.c
     src/sense/sense_windows.c
+    src/sense/sense_sysload.c
+    src/sense/sense_luma.c
+    src/sense/sense_heatmap.c
     src/body/palette.c
     src/body/voice_synth.c
+    src/body/audio_out.c
     src/mind/workspace.c
     src/lang/lexicon.c
+    src/behavior/behavior_dmn.c
+    src/behavior/behavior_bond.c
+    src/behavior/behavior_explore.c
 )
 
 set(SRCS
@@ -74,6 +92,7 @@ target_include_directories(caddin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platform
     ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer
     ${CMAKE_CURRENT_SOURCE_DIR}/src/animation
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/behavior
 )
 
 if(NOT WIN32)
@@ -114,3 +133,20 @@ add_executable(test_mind_lang src/mind/workspace.c src/lang/lexicon.c tests/test
 target_include_directories(test_mind_lang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core ${CMAKE_CURRENT_SOURCE_DIR}/src/mind ${CMAKE_CURRENT_SOURCE_DIR}/src/lang)
 target_link_libraries(test_mind_lang PRIVATE m)
 add_test(NAME MindLangTest COMMAND test_mind_lang)
+
+add_executable(test_new_modules
+    src/sense/sense_sysload.c
+    src/sense/sense_heatmap.c
+    src/behavior/behavior_dmn.c
+    src/behavior/behavior_bond.c
+    src/behavior/behavior_explore.c
+    tests/test_new_modules.c
+)
+target_include_directories(test_new_modules PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sense
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/behavior
+)
+target_link_libraries(test_new_modules PRIVATE m)
+add_test(NAME NewModulesTest COMMAND test_new_modules)

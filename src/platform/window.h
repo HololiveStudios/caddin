@@ -39,4 +39,15 @@ void       window_get_pos(const PetWindow *w, int *out_x, int *out_y);
 void       window_get_workarea(int *out_x, int *out_y, int *out_w, int *out_h);
 void       window_apply_impulse(PetWindow *w, double fx, double fy);
 
+/* Retorna e reseta o delta acumulado do scroll wheel (Fix 3) */
+int        window_get_wheel(PetWindow *w);
+
+/* Retorna geometria da janela ativa no sistema operacional (Fix 4).
+ * Preenche out_x, out_y, out_ww, out_hh, out_id.
+ * Retorna false se não for possível obter os dados. */
+bool       window_get_active_window_rect(PetWindow *w,
+                                         int *out_x, int *out_y,
+                                         int *out_ww, int *out_hh,
+                                         uint64_t *out_id);
+
 #endif /* CORTEX_WINDOW_H */

@@ -40,6 +40,9 @@ struct PetWindow {
     /* fila circular de teclas */
     char  key_buf[KEY_BUF];
     int   key_head, key_tail;
+
+    /* scroll wheel */
+    int   wheel_delta;
 };
 
 static struct PetWindow *g_active_win = NULL;
@@ -151,6 +154,14 @@ static LRESULT CALLBACK pet_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_DESTROY:
         if (w) w->should_close = true;
         return 0;
+
+    case WM_MOUSEWHEEL: {
+        if (w) {
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            w->wheel_delta += (delta > 0) ? 1 : -1;
+        }
+        return 0;
+    }
 
     default:
         return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -497,4 +508,30 @@ void window_apply_impulse(PetWindow *w, double fx, double fy) {
     w->vx += fx;
     w->vy += fy;
     w->in_physics = true;
+}
+
+/* Scroll wheel — Win32 */
+int window_get_wheel(PetWindow *w) {
+    if (!w) return 0;
+    int d = w->wheel_delta;
+    w->wheel_delta = 0;
+    return d;
+}
+
+/* Janela ativa — Win32 via GetForegroundWindow */
+bool window_get_active_window_rect(PetWindow *w,
+                                   int *out_x, int *out_y,
+                                   int *out_ww, int *out_hh,
+                                   uint64_t *out_id) {
+    if (!w) return false;
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == w->hwnd) return false;
+    RECT rc;
+    if (!GetWindowRect(fg, &rc)) return false;
+    if (out_x)  *out_x  = (int)rc.left;
+    if (out_y)  *out_y  = (int)rc.top;
+    if (out_ww) *out_ww = (int)(rc.right - rc.left);
+    if (out_hh) *out_hh = (int)(rc.bottom - rc.top);
+    if (out_id) *out_id = (uint64_t)(uintptr_t)fg;
+    return true;
 }

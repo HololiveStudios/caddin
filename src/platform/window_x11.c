@@ -54,6 +54,9 @@ struct PetWindow {
     /* fila circular de teclas */
     char  key_buf[KEY_BUF];
     int   key_head, key_tail;
+
+    /* scroll wheel — acumulado entre frames */
+    int   wheel_delta;
 };
 
 static struct PetWindow *g_active_win = NULL;
@@ -263,6 +266,15 @@ void window_poll_events(PetWindow *w) {
             break;
 
         case ButtonPress:
+            /* Scroll wheel: Button4 = cima, Button5 = baixo */
+            if (event.xbutton.button == Button4) {
+                w->wheel_delta += 1;
+                break;
+            }
+            if (event.xbutton.button == Button5) {
+                w->wheel_delta -= 1;
+                break;
+            }
             if (event.xbutton.button == Button1) {
                 w->mouse_down = true;
                 w->dragging   = false;
@@ -597,4 +609,62 @@ void window_apply_impulse(PetWindow *w, double fx, double fy) {
     w->vx += fx;
     w->vy += fy;
     w->in_physics = true;
+}
+
+/* ── Fix 3: leitura acumulada do scroll wheel ── */
+int window_get_wheel(PetWindow *w) {
+    if (!w) return 0;
+    int d = w->wheel_delta;
+    w->wheel_delta = 0;
+    return d;
+}
+
+/* ── Fix 4: retorna geometria da janela ativa no X11 via _NET_ACTIVE_WINDOW ── */
+bool window_get_active_window_rect(PetWindow *w,
+                                   int *out_x, int *out_y,
+                                   int *out_ww, int *out_hh,
+                                   uint64_t *out_id) {
+    if (!w) return false;
+    Display *dpy = w->dpy;
+    int screen   = w->screen;
+    Window root  = RootWindow(dpy, screen);
+
+    Atom net_aw = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", True);
+    if (net_aw == None) return false;
+
+    Atom actual_type;
+    int  actual_format;
+    unsigned long nitems, bytes_after;
+    unsigned char *prop_data = NULL;
+
+    int ret = XGetWindowProperty(dpy, root, net_aw, 0, 1, False, XA_WINDOW,
+                                 &actual_type, &actual_format,
+                                 &nitems, &bytes_after, &prop_data);
+    if (ret != Success || !prop_data || nitems < 1) {
+        if (prop_data) XFree(prop_data);
+        return false;
+    }
+
+    Window active = *(Window *)prop_data;
+    XFree(prop_data);
+
+    /* Ignora a própria janela do pet */
+    if (active == w->xwin || active == None) return false;
+
+    /* Obtém geometria */
+    XWindowAttributes xwa;
+    if (!XGetWindowAttributes(dpy, active, &xwa)) return false;
+
+    /* Converte coordenadas para root */
+    int rx = 0, ry = 0;
+    Window child_dummy;
+    XTranslateCoordinates(dpy, active, root, 0, 0, &rx, &ry, &child_dummy);
+
+    if (out_x)  *out_x  = rx;
+    if (out_y)  *out_y  = ry;
+    if (out_ww) *out_ww = xwa.width;
+    if (out_hh) *out_hh = xwa.height;
+    if (out_id) *out_id = (uint64_t)active;
+
+    return true;
 }

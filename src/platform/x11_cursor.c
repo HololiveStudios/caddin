@@ -38,6 +38,21 @@ bool x11_get_screen_cursor(int *out_x, int *out_y) {
     return false;
 }
 
+void *x11_get_display(void) {
+    if (!s_cursor_dpy) {
+        s_cursor_dpy = XOpenDisplay(NULL);
+    }
+    return (void *)s_cursor_dpy;
+}
+
+unsigned long x11_get_root(void) {
+    if (!s_cursor_dpy) {
+        s_cursor_dpy = XOpenDisplay(NULL);
+        if (!s_cursor_dpy) return 0;
+    }
+    return (unsigned long)DefaultRootWindow(s_cursor_dpy);
+}
+
 #else
 
 bool x11_get_screen_cursor(int *out_x, int *out_y) {
