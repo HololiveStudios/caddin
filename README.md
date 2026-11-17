@@ -433,21 +433,86 @@ O Caddin preserva aprendizado entre sessões:
 
 ```
 caddin/
+├── BUILD.md                       # Instruções detalhadas de build, dependências e compilação cruzada
+├── CMakeLists.txt                 # Script mestre de configuração e compilação CMake
+├── Makefile                       # Atalhos de automação (make, make run, make test, make windows)
+├── README.md                      # Documentação técnica completa e guia do ecossistema
+├── RELEASE_NOTES_v1.1.6.md        # Notas de lançamento detalhadas da versão v1.1.6
+├── behavior.c / .h                # Camada comportamental / instintos base
+├── conditioning.c / .h            # Condicionamento clássico e operante
+├── homeostasis.c / .h             # Balanço homeostático e dinâmica biológica complementar
+├── memory.c / .h                  # Subsistema de memória episódica e consolidação
+├── network_data.h                 # Definições de topologia de rede e estruturas neurais
+├── neuro.c / .h                   # Módulo neuromórfico auxiliar
+├── runtime_types.h                # Tipos de dados fundamentais do runtime
+├── sensors.c / .h                 # Interface agregadora sensorial
+├── install.sh                     # Script shell de setup e instalação de pacotes
+├── caddin.brain                   # Estado sináptico persistido (gerado em runtime)
+├── cmake/
+│   └── mingw-w64.cmake            # Arquivo de toolchain para cross-compilação Windows no Linux
+├── docs/
+│   └── PLANO_MESTRE_EVOLUCAO_CADDIN.md # Documento de engenharia e plano de expansão
 ├── src/
-│   ├── core/           # SNN Q8.8/CSR, neuromod, CPG, predict, arena, RNG
-│   ├── sense/          # mouse, scroll, heatmap, luma, sysload, windows
-│   ├── behavior/       # DMN, bond, explore
-│   ├── body/           # voice_synth (11 tipos), audio_out, palette
-│   ├── mind/           # Global Workspace
-│   ├── lang/           # lexicon emergente
-│   ├── animation/      # softbody, emotions, autonomy, animation
-│   ├── renderer/       # rasterizador CPU 2D
-│   ├── platform/       # X11 XShm + Win32 GDI
-│   └── main.c          # loop principal 60 fps
-├── tests/              # 7 suítes headless (make test)
-├── bin/                # executáveis pré-compilados
-├── CMakeLists.txt
-└── Makefile
+│   ├── main.c                     # Loop principal em tempo real (60 FPS, dt fixo, zero malloc)
+│   ├── config.h                   # Constantes de configuração, física, janelas e limiares
+│   │
+│   ├── animation/                 # Física elástica, animação e dinâmica afetiva
+│   │   ├── animation.c / .h       # Interpolação de poses e sincronia respiratória com CPG
+│   │   ├── autonomy.c / .h        # Motor de locomoção e perambulação guiado pela SNN
+│   │   ├── emotions.c / .h        # Máquina de estados emocionais e temporizadores (state_timer)
+│   │   └── softbody.c / .h        # Física massa-mola procedural (squish, stretch, jiggle, purr)
+│   │
+│   ├── behavior/                  # Comportamentos complexos autônomos
+│   │   ├── behavior_bond.c / .h   # Vínculo afetivo de longo prazo, apego e detecção de saudade
+│   │   ├── behavior_dmn.c / .h    # Default Mode Network (bocejos, auto-limpeza, trilos e devaneios)
+│   │   └── behavior_explore.c / .h# Exploração territorial baseada em novidade e mapa térmico
+│   │
+│   ├── body/                      # Expressão física, bioacústica e áudio
+│   │   ├── audio_out.c / .h       # Saída de áudio assíncrona multithread (ALSA no Linux / WinMM no Windows)
+│   │   ├── palette.c / .h         # Mapeamento do vetor neuroquímico em aura cromática e pupilas
+│   │   └── voice_synth.c / .h     # Síntese procedural PCM/FM rica (11 tipos de vocalizações emocionais)
+│   │
+│   ├── core/                      # Núcleo neurobiológico e computacional de baixa latência
+│   │   ├── arena.c / .h           # Alocador de memória Arena estático (zero fragmentação)
+│   │   ├── cpg.c / .h             # Central Pattern Generator (respiração biológica e febre cognitiva)
+│   │   ├── fixed.h                # Biblioteca matemática em ponto fixo Q8.8 (fix16_t)
+│   │   ├── neuromod.c / .h        # Dinâmica de 5 neuromoduladores (Dopamina, Noradrenalina, Serotonina, Acetilcolina, Cortisol)
+│   │   ├── predict.c / .h         # Codificação preditiva temporal e disparos de surpresa (mismatch spikes)
+│   │   ├── rng.c / .h             # Gerador pseudo-aleatório ultra-rápido determinístico
+│   │   └── snn.c / .h             # Rede Neural Pulsada (SNN) LIF com formato esparso CSR e plasticidade R-STDP/STP
+│   │
+│   ├── lang/                      # Aquisição e consolidação de linguagem emergente
+│   │   └── lexicon.c / .h         # Léxico multimodal associativo com compressão e pruning no sono
+│   │
+│   ├── mind/                      # Consciência funcional e atenção
+│   │   └── workspace.c / .h       # Espaço de Trabalho Global (Global Workspace Theory, competição WTA)
+│   │
+│   ├── platform/                  # Camadas de abstração de janela e subsistemas de SO
+│   │   ├── window.h               # Interface agnóstica de controle de janela transparente
+│   │   ├── window_win32.c         # Implementação Win32 GDI com UpdateLayeredWindow
+│   │   ├── window_x11.c           # Implementação Linux X11 com XShm e composição ARGB
+│   │   └── x11_cursor.c / .h      # Interrogação de ponteiro e janelas ativas no servidor X11
+│   │
+│   ├── renderer/                  # Rasterizador por software em CPU (sem dependência de OpenGL)
+│   │   ├── face.c / .h            # Desenho vetorial de feições (olhos, pupila, boca, sobrancelhas)
+│   │   └── pixel_draw.c / .h      # Primitivas gráficas antialiasing e preenchimento de polígonos
+│   │
+│   └── sense/                     # Percepção física e sensorial integrada ao SO
+│       ├── sense_heatmap.c / .h   # Grade de calor espacial da densidade de uso do cursor
+│       ├── sense_luma.c / .h      # Captura de luminância da tela sob o mascote
+│       ├── sense_mouse.c / .h     # Vetores de movimento, velocidade, atrito de carinho e sacudidas
+│       ├── sense_scroll.c / .h    # Vento aerodinâmico gerado pelo scroll do mouse
+│       ├── sense_sysload.c / .h   # Monitoramento em tempo real de carga de CPU do SO
+│       └── sense_windows.c / .h   # Geometria de janelas (galhos de pouso, quina de risco, Alt+Tab)
+│
+└── tests/                         # Suíte completa de testes unitários automatizados (Headless)
+    ├── test_biology.c             # Verificação de CPG, neuromoduladores e predição temporal
+    ├── test_body.c                # Testes dos 11 timbres de voz procedural e paleta
+    ├── test_core.c                # Testes de integridade da aritmética Q8.8, arena e RNG
+    ├── test_mind_lang.c           # Verificação do Global Workspace e consolidação léxica
+    ├── test_new_modules.c         # Verificação de DMN, vínculo afetivo, exploração e áudio assíncrono
+    ├── test_sensors.c             # Testes de todos os sensores de desktop (mouse, janelas, scroll, luma, carga)
+    └── test_snn.c                 # Validação da dinâmica SNN LIF, conectividade CSR e R-STDP
 ```
 
 ---
