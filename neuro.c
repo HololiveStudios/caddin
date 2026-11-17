@@ -1,12 +1,13 @@
 #include "neuro.h"
 #include "network_data.h"
+#include "src/core/persist.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define NS (PESTINHA_CHANNELS * 4)  /* 256 neurônios sensoriais */
+#define NS (PESTINHA_CHANNELS * 8)  /* 256 neurônios sensoriais */
 #define NL (PESTINHA_NEURONS - NS)  /* 768 neurônios livres (inter + motores) */
 #define NPOOLS (PESTINHA_CHANNELS + PESTINHA_INTERNEURONS + PESTINHA_MOTORS)
 
@@ -384,18 +385,22 @@ void brain_reset_habituation(Brain *b) {
 
 void brain_save(const Brain *b, const char *path) {
     if (!b || !path) return;
-    FILE *f = fopen(path, "wb");
-    if (!f) return;
-    uint32_t magic = 0x50455354; /* 'PEST' */
-    uint32_t count = PESTINHA_NEURONS;
-    fwrite(&magic, sizeof(magic), 1, f);
-    fwrite(&count, sizeof(count), 1, f);
-    fwrite(b->w, sizeof(float), PESTINHA_NEURONS * NL, f);
-    fclose(f);
+    /* Persistência v2 com cabeçalho atômico e integridade CRC32 */
+    size_t payload_size = sizeof(float) * PESTINHA_NEURONS * NL;
+    persist_save_atomic(path, PESTINHA_NEURONS, b->w, payload_size);
 }
 
 int brain_load(Brain *b, const char *path) {
     if (!b || !path) return 0;
+    size_t payload_size = sizeof(float) * PESTINHA_NEURONS * NL;
+    size_t bytes_read = 0;
+
+    /* 1. Tenta carregar no formato moderno Persistência v2 */
+    if (persist_load_safe(path, PESTINHA_NEURONS, b->w, payload_size, &bytes_read)) {
+        if (bytes_read == payload_size) return 1;
+    }
+
+    /* 2. Fallback: formato legado v1 ('PEST') para não perder cérebros antigos */
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
     uint32_t magic = 0, count = 0;
@@ -405,9 +410,12 @@ int brain_load(Brain *b, const char *path) {
     if (fread(&count, sizeof(count), 1, f) != 1 || count != PESTINHA_NEURONS) {
         fclose(f); return 0;
     }
-    if (fread(b->w, sizeof(float), PESTINHA_NEURONS * NL, f) != PESTINHA_NEURONS * NL) {
+    if (fread(b->w, sizeof(float), PESTINHA_NEURONS * NL, f) != payload_size) {
         fclose(f); return 0;
     }
     fclose(f);
+
+    /* Converte automaticamente para o formato v2 na próxima gravação */
+    brain_save(b, path);
     return 1;
 }

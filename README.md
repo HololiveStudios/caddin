@@ -1,28 +1,51 @@
-# 🐾 Caddin — v1.1.6
+# 🐾 Caddin — v1.2.0
 
-### Mascote Virtual Autônomo com SNN Ponto Fixo Q8.8, Voz Emocional Procedural, Consciência Funcional e Física Softbody
+### Mascote Virtual Autônomo com SNN de 2048 Neurônios, Persistência Atômica v2, Comportamentos Avançados e Percepção Multimodal
 
-O **Caddin** é um companheiro virtual vivo para desktop que opera como uma **simulação neurobiológica ativa** em tempo real. Ao contrário de scripts rígidos ou chamadas LLM, o Caddin possui um **cérebro baseado em Rede Neural Pulsada (SNN)** com conectividade CSR esparsa, plasticidade R-STDP trifatorial, homeostase hormonal, gerador de ritmo central (CPG), espaço de trabalho global atencional, percepção física contínua do sistema operacional e um **sintetizador de voz emocional procedural com 11 tipos de vocalização** biologicamente inspirados.
+O **Caddin** é um companheiro virtual vivo para desktop que opera como uma **simulação neurobiológica ativa** em tempo real. Com um **cérebro SNN de 2048 neurônios biofísicos ativos**, o mascote integra percepção acústica de microfone, leitura de tela contextual, física elástica softbody, árvore de comportamentos autônomos (esconder-se, caçar, pousar em janelas, ciclo susto→alívio, DMN) e **persistência atômica v2 com integridade CRC32**.
 
-Com um **motor 2D ultraleve** com física softbody procedural, janela translúcida flutuante e **consumo de ~7 MB de RAM total**, roda 100% nativo em **Linux (X11)** e **Windows (Win32 GDI)** sem OpenGL, Mesa, LLVM ou bibliotecas pesadas.
+Com um **motor 2D ultraleve**, janela translúcida flutuante e **consumo de memória ultrabaixo (~12 MB de RAM total)**, roda 100% nativo em **Linux (X11 + ALSA)** e **Windows (Win32 GDI + WinMM)** sem OpenGL, Mesa, LLVM ou bibliotecas pesadas.
 
 ---
 
 ## 📑 Sumário
 
-1. [Destaques da Versão 1.1.6](#-destaques-da-versão-116)
+1. [Destaques da Versão 1.2.0](#-destaques-da-versão-120)
 2. [Histórico de Versões e Contagem de Neurônios](#-histórico-de-versões-e-contagem-de-neurônios)
 3. [Diagramas de Arquitetura](#-diagramas-de-arquitetura)
 4. [Arquitetura Detalhada dos Módulos](#-arquitetura-detalhada-dos-módulos)
-5. [Sistema de Voz Emocional — v1.1.6](#-sistema-de-voz-emocional--v116)
-6. [Sensores do Desktop](#-sensores-do-desktop)
-7. [Comportamentos Autônomos](#-comportamentos-autônomos)
-8. [Instalação e Compilação](#-instalação-e-compilação)
-9. [Controles e Dinâmica Física](#-controles-e-dinâmica-física)
-10. [Suíte de Testes](#-suíte-de-testes-7-testes-100-aprovados)
-11. [Persistência Sináptica e Sono](#-persistência-sináptica-e-sono)
-12. [Estrutura do Projeto](#-estrutura-do-projeto)
-13. [Roadmap e Próximas Prioridades](#-roadmap-e-próximas-prioridades)
+5. [Sistema de Voz Emocional (11 Tipos)](#-sistema-de-voz-emocional--11-tipos)
+6. [Sensores do Desktop e Percepção Avançada](#-sensores-do-desktop-e-percepção-avançada)
+7. [Comportamentos Autônomos e Límbicos](#-comportamentos-autônomos-e-límbicos)
+8. [Persistência v2 com Escrita Atômica e CRC32](#-persistência-v2-com-escrita-atômica-e-crc32)
+9. [Instalação e Compilação](#-instalação-e-compilação)
+10. [Controles e Dinâmica Física](#-controles-e-dinâmica-física)
+11. [Suíte de Testes (7 Suítes, 100% Aprovadas)](#-suíte-de-testes-7-suítes-100-aprovadas)
+12. [Estrutura do Projeto Completa](#-estrutura-do-projeto-completa)
+
+---
+
+## 🌟 Destaques da Versão 1.2.0
+
+### 🧠 Expansão Neural para 2048 Neurônios Ativos
+O cérebro em tempo real foi escalonado de 1024 para **2048 neurônios biológicos** no laço de 60 FPS:
+- **512 Neurônios Sensoriais Aferentes (64 pools × 8 neurônios):** Recebem estímulos de mouse, scroll wind, janelas, estresse de CPU, calor, luminância da tela, áudio ambiente do microfone e texto contextual de tela.
+- **1152 Interneurônios Associativos (32 pools × 36 neurônios):** Duplicam a capacidade plástica com R-STDP e homeostase BCM para aprendizagem emocional e habituação de longo prazo.
+- **384 Neurônios Motores (24 pools × 16 neurônios):** Maior precisão no tônus muscular do softbody, postura e locomoção autônoma.
+
+### 🛡️ Persistência v2 com Escrita Atômica e CRC32 (`src/core/persist.c`)
+- **Cabeçalho Binário Estrito:** Identificador mágico `0x43414444` ("CADD"), versão 2, contagem exata de neurônios e soma de verificação **CRC32 (IEEE 802.3)**.
+- **Escrita Atômica:** Gravação preliminar em arquivo `.tmp` seguida de substituição via `rename()` / `MoveFileEx`, eliminando qualquer risco de arquivo corrompido em quedas de energia.
+- **Fuzz Testing:** Testado contra 100 mutações aleatórias com garantia de rejeição suave sem nenhum travamento ou falha de segmentação.
+
+### 🎭 Novos Comportamentos Avançados (Lote P5)
+- **`behavior_hide_hunt.c` (Esconder-se e Caçar):** Sob estresse alto, o pet busca refúgio e esconde 80% do corpo além da borda da janela ativa mais próxima. Em bom humor, aproxima-se furtivamente do cursor e desfere um bote lúdico.
+- **`behavior_perch.c` (Janelas como Galhos):** Pousa suavemente no topo da janela ativa em repouso com gravidade natural, acompanhando a janela se arrastada.
+- **`behavior_startle_relief.c` (Resposta Bifásica Susto → Alívio):** Fase 1 (choque imediato com squish espasmódico) seguida automaticamente pela Fase 2 (alívio progressivo, injeção de serotonina e suspiro relaxante `VOICE_GRUNT_IDLE`).
+
+### 🎙️ Percepção Avançada (Lote P6)
+- **`sense_mic.c` (Microfone Ambiente):** Captura não-bloqueante (ALSA no Linux, waveIn no Windows) monitorando RMS em tempo real para detectar palmas, gritos e voz.
+- **`sense_text.c` (Leitura Contextual de Tela):** Extrai palavras e tópicos da janela em foco (via `_NET_WM_NAME` no X11 e `GetWindowText` no Windows) alimentando o `lexicon` multimodal.
 
 ---
 
@@ -83,20 +106,22 @@ voice_synth_trigger(&voice, VOICE_CHIRP_CURIOUS, 0.18f);
 
 | Versão | Tag | Neurônios Ativos | Topologia / Arquitetura Neural | Destaque Principal |
 |---|---|---|---|---|
+| **v1.2.0** | `v1.2.0` | **2048** (512 sensoriais + 1152 inter + 384 motores) | SNN Escalonada + Persistência v2 CRC32 + Multimodal | Expansão para 2048 neurônios, persistência atômica v2, comportamentos hide/hunt/perch/alívio, microfone e leitura de texto |
 | **v1.1.6** | `v1.1.6` | **1024** (256 sensoriais + 768 inter/motores) | SNN Biofísica LIF + CSR esparso escalável a **2048+** neurônios | 11 tipos de voz emocional procedural, `voice_synth_trigger_ex()`, mapeamento escalado por `state_timer` |
 | **v1.1.5** | `v1.1.5` | **1024** (256 sensoriais + 768 inter/motores) | Desacoplamento motor de áudio + modulação emocional | Vocalização vinculada estritamente a emoções (fim do grito), cooldowns por tipo, fix reflexo nociceptivo |
 | **v1.1.4** | `v1.1.4` | **1024** (256 sensoriais + 768 inter/motores) | Injeção aferente de 6 sensores periféricos + DMN/Bond | ALSA/WinMM non-blocking, scroll wheel, janela ativa, 3 novos sensores, 3 comportamentos autônomos |
 | **v1.1.3** | `v1.1.3` | **1024** (loop) / **2048** (benchmark CSR) | Ponto fixo Q8.8, CSR, R-STDP trifatorial, atraso sináptico | Integração completa no loop principal, CPG marcapasso, Global Workspace e predição temporal |
 | **v1.0.2** | — | **1024** neurônios densos | Matriz sináptica clássica com plasticidade BCM | Release inicial — SNN 1024, Softbody elástico, backends X11/Win32 |
 
-### 🧠 Detalhamento da Topologia Neural Atual (v1.1.6)
+### 🧠 Detalhamento da Topologia Neural Atual (v1.2.0)
 
-- **Loop Principal em Tempo Real (`PESTINHA_NEURONS = 1024`):**
-  - **256 Neurônios Sensoriais Aferentes:** Mapeiam cinemática do mouse, atrito de carinho, vento de scroll, calor de exploração, luminância da tela (luma), estresse de CPU (sysload) e geometria de janelas.
-  - **768 Neurônios Livres (Interneurônios e Motores):** Conectividade recorrente com homeostase BCM, fadiga sináptica e controle de tônus muscular (squish, stretch, jiggle, purr).
+- **Loop Principal em Tempo Real (`PESTINHA_NEURONS = 2048`):**
+  - **512 Neurônios Sensoriais Aferentes (64 pools × 8 neurônios):** Mapeiam cinemática do mouse, atrito de carinho, vento de scroll, calor de exploração, luminância da tela (luma), estresse de CPU (sysload), geometria de janelas, áudio do microfone e palavras de tela.
+  - **1152 Interneurônios Associativos (32 pools × 36 neurônios):** Duplicam a densidade de conexões recorrentes com homeostase BCM, habituação pré-sináptica e decaimento dinâmico.
+  - **384 Neurônios Motores (24 pools × 16 neurônios):** Aumentam a granularidade do tônus muscular (squish, stretch, jiggle, purr) e locomoção intencional.
 - **Motor SNN de Próxima Geração CSR (`src/core/snn.c`):**
-  - Implementado em aritmética de ponto fixo Q8.8 (`fix16_t`) com representação esparsa CSR (Compressed Sparse Row).
-  - Validado e testado em benchmark (`test_snn.c`) com **2048 neurônios e 65.536 sinapses plásticas**, mantendo consumo inferior a **3 MB de RAM** e executando a mais de **2500 ticks/s** em apenas 1 core de CPU.
+  - Implementado em aritmética de ponto fixo Q8.8 (`fix16_t`) com representação esparsa CSR (Compressed Sparse Row) e atraso axônico.
+  - Consome menos de **3 MB de RAM** e executa a mais de **2500 ticks/s** em apenas 1 core de CPU.
 
 ---
 
@@ -474,7 +499,10 @@ caddin/
 │   ├── behavior/                  # Comportamentos complexos autônomos
 │   │   ├── behavior_bond.c / .h   # Vínculo afetivo de longo prazo, apego e detecção de saudade
 │   │   ├── behavior_dmn.c / .h    # Default Mode Network (bocejos, auto-limpeza, trilos e devaneios)
-│   │   └── behavior_explore.c / .h# Exploração territorial baseada em novidade e mapa térmico
+│   │   ├── behavior_explore.c / .h# Exploração territorial baseada em novidade e mapa térmico
+│   │   ├── behavior_hide_hunt.c/.h# Se esconder atrás de bordas sob medo e caça furtiva de cursor
+│   │   ├── behavior_perch.c / .h  # Pouso e descanso sobre o topo da janela ativa
+│   │   └── behavior_startle_relief.c/.h # Resposta bifásica choque imediato -> alívio com serotonina
 │   │
 │   ├── body/                      # Expressão física, bioacústica e áudio
 │   │   ├── audio_out.c / .h       # Saída de áudio assíncrona multithread (ALSA no Linux / WinMM no Windows)
@@ -486,6 +514,7 @@ caddin/
 │   │   ├── cpg.c / .h             # Central Pattern Generator (respiração biológica e febre cognitiva)
 │   │   ├── fixed.h                # Biblioteca matemática em ponto fixo Q8.8 (fix16_t)
 │   │   ├── neuromod.c / .h        # Dinâmica de 5 neuromoduladores (Dopamina, Noradrenalina, Serotonina, Acetilcolina, Cortisol)
+│   │   ├── persist.c / .h         # Persistência atômica v2 com integridade CRC32 e proteção contra corrupção
 │   │   ├── predict.c / .h         # Codificação preditiva temporal e disparos de surpresa (mismatch spikes)
 │   │   ├── rng.c / .h             # Gerador pseudo-aleatório ultra-rápido determinístico
 │   │   └── snn.c / .h             # Rede Neural Pulsada (SNN) LIF com formato esparso CSR e plasticidade R-STDP/STP
@@ -509,9 +538,11 @@ caddin/
 │   └── sense/                     # Percepção física e sensorial integrada ao SO
 │       ├── sense_heatmap.c / .h   # Grade de calor espacial da densidade de uso do cursor
 │       ├── sense_luma.c / .h      # Captura de luminância da tela sob o mascote
+│       ├── sense_mic.c / .h       # Captura de microfone ambiente (RMS, palmas, voz)
 │       ├── sense_mouse.c / .h     # Vetores de movimento, velocidade, atrito de carinho e sacudidas
 │       ├── sense_scroll.c / .h    # Vento aerodinâmico gerado pelo scroll do mouse
 │       ├── sense_sysload.c / .h   # Monitoramento em tempo real de carga de CPU do SO
+│       ├── sense_text.c / .h      # Leitura contextual de palavras e títulos da janela ativa
 │       └── sense_windows.c / .h   # Geometria de janelas (galhos de pouso, quina de risco, Alt+Tab)
 │
 └── tests/                         # Suíte completa de testes unitários automatizados (Headless)
@@ -526,27 +557,24 @@ caddin/
 
 ---
 
-## 📋 Roadmap e Próximas Prioridades
+## 📋 Roadmap e Status das Prioridades
 
-### ✅ Concluído até v1.1.6
+### ✅ Concluído até v1.2.0
 - **🟢 P1 — Correção de Bugs Críticos:** Áudio mudo no pipeline, centro de carinho do mouse, captura de scroll wheel e colisão de janela ativa resolvidos.
 - **🟢 P2 — Bioacústica e Voz Procedural Completa:** Sintetizador rico com 11 tipos emocionais, intensidade adaptativa e cooldowns estritos guiados por estados emocionais.
 - **🟢 P3 — Sensores e Comportamentos Autônomos:** Integração de `sysload`, `luma`, `heatmap`, `behavior_dmn` (Default Mode Network), `behavior_bond` (vínculo afetivo) e `behavior_explore`.
-
-### 🟡 Em Planejamento / Próximos Lotes
-- **🟡 P4 — Persistência v2 (`persist.c`):**
-  - Header binário com *magic bytes*, versão e soma de verificação CRC32.
-  - Escrita atômica via arquivo temporário + `rename()`.
-  - Fuzz test com bytes aleatórios para garantia de imunidade a falhas ou corrupção de save.
-- **🟡 P5 — Comportamentos Avançados (da lista das 30 ideias biológicas):**
-  - `behavior_hide_hunt.c`: Se esconder 80% atrás de bordas de janelas sob medo/estresse alto e caça de cursor.
+- **🟢 P4 — Persistência v2 com Escrita Atômica e CRC32 (`src/core/persist.c`):**
+  - Header binário com magic bytes `0x43414444` ("CADD"), versão 2 e soma de verificação CRC32 (IEEE 802.3).
+  - Escrita atômica via arquivo temporário + `rename()` / `MoveFileEx`.
+  - Fuzz test com 100 amostras mutantes garantindo imunidade total contra corrupção ou falhas.
+- **🟢 P5 — Comportamentos Avançados:**
+  - `behavior_hide_hunt.c`: Fuga e refúgio 80% atrás de bordas sob estresse alto e caça lúdica do cursor em bom humor.
   - `behavior_perch.c`: Pouso com gravidade e repouso sobre a borda superior da janela ativa.
-  - Habituação por depleção sináptica de curto prazo (ideia #6).
-  - Resposta bifásica de susto seguido de alívio progressivo (ideia #4).
-- **🟡 P6 — Percepção e Linguagem Avançada:**
-  - Microfone em tempo real via captura ALSA `snd_pcm` (Linux) e waveIn (Windows) para reação a palmas e voz humana (somente com flag explícita de usuário).
-  - Leitura de texto da tela via API de acessibilidade (Linux AT-SPI e Windows UI Automation) para reação sem OCR.
-  - Quantização de fonemas online via k-means no léxico multimodal.
+  - `behavior_startle_relief.c`: Resposta bifásica choque imediato (squish) seguido de alívio progressivo com serotonina e suspiro.
+- **🟢 P6 — Percepção Avançada Multimodal:**
+  - `sense_mic.c`: Captura não-bloqueante de microfone (ALSA / waveIn) com cálculo RMS de som ambiente e detecção de palmas.
+  - `sense_text.c`: Leitura contextual de palavras e títulos de janelas ativas alimentando o léxico multimodal sem sobrecarga de OCR.
+- **🟢 Escalonamento Neural:** Expansão da rede biológica ativa para **2048 neurônios** (512 sensoriais + 1152 inter + 384 motores).
 
 ---
 

@@ -39,6 +39,11 @@
 #include "behavior/behavior_dmn.h"
 #include "behavior/behavior_bond.h"
 #include "behavior/behavior_explore.h"
+#include "behavior/behavior_hide_hunt.h"
+#include "behavior/behavior_perch.h"
+#include "behavior/behavior_startle_relief.h"
+#include "sense/sense_mic.h"
+#include "sense/sense_text.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -48,6 +53,10 @@
 
 #if defined(__linux__) && defined(__GLIBC__)
 #  include <malloc.h>
+#endif
+
+#if defined(__linux__) && !defined(_WIN32)
+extern void *x11_get_display(void);
 #endif
 
 static volatile sig_atomic_t g_running = 1;
@@ -157,6 +166,11 @@ int main(void) {
     BehaviorDmn             dmn;
     BehaviorBond            bond;
     BehaviorExplore         explore;
+    BehaviorHideHunt        hide_hunt;
+    BehaviorPerch           perch;
+    BehaviorStartleRelief   startle_relief;
+    SenseMic                sense_mic;
+    SenseText               sense_text;
 
     sense_mouse_init(&sense_mouse);
     sense_scroll_init(&sense_scroll);
@@ -171,6 +185,11 @@ int main(void) {
     behavior_dmn_init(&dmn);
     behavior_bond_init(&bond);
     behavior_explore_init(&explore);
+    behavior_hide_hunt_init(&hide_hunt);
+    behavior_perch_init(&perch);
+    behavior_startle_relief_init(&startle_relief);
+    sense_mic_init(&sense_mic, 16000);
+    sense_text_init(&sense_text);
 
     /* ── Luma precisa de Display*, criado dinamicamente ── */
     SenseLuma *sense_luma = NULL;
@@ -183,7 +202,6 @@ int main(void) {
         {
             /* x11_get_display retorna struct _XDisplay* (opaco fora de Xlib),
              * mas sense_luma_create o aceita como void* */
-            extern void *x11_get_display(void);
             extern unsigned long x11_get_root(void);
             dpy2  = x11_get_display();
             root2 = x11_get_root();
@@ -290,16 +308,14 @@ int main(void) {
         sense_scroll_step(&sense_scroll);
 
         /* Fix 4: janela ativa — detecção de zona de perigo e troca de foco */
-        {
-            int aw_x, aw_y, aw_ww, aw_hh;
-            uint64_t aw_id = 0;
-            if (window_get_active_window_rect(win, &aw_x, &aw_y, &aw_ww, &aw_hh, &aw_id)) {
-                sense_windows_update(&sense_windows, aw_id,
-                                     aw_x, aw_y, aw_ww, aw_hh);
-                if (sense_windows_did_switch_focus(&sense_windows)) {
-                    neuromod_inject_ne(&neuromod, fix_from_float(0.05f));
-                    softbody_jiggle(&sb, 0.18f);
-                }
+        int aw_x = 0, aw_y = 0, aw_ww = 0, aw_hh = 0;
+        uint64_t aw_id = 0;
+        if (window_get_active_window_rect(win, &aw_x, &aw_y, &aw_ww, &aw_hh, &aw_id)) {
+            sense_windows_update(&sense_windows, aw_id,
+                                 aw_x, aw_y, aw_ww, aw_hh);
+            if (sense_windows_did_switch_focus(&sense_windows)) {
+                neuromod_inject_ne(&neuromod, fix_from_float(0.05f));
+                softbody_jiggle(&sb, 0.18f);
             }
         }
 
@@ -352,6 +368,7 @@ int main(void) {
         fix16_t motor_jolt = 0;
         if (neuromod_check_nociceptive_reflex(&neuromod, shake_intensity, &motor_jolt)) {
             softbody_squish(&sb, 0.45f);
+            behavior_startle_relief_trigger(&startle_relief, (float)fix_to_float(shake_intensity));
             if (t_now - voice_last_alarm > VOICE_COOLDOWN_ALARM) {
                 /* Sacudida violenta → susto agudo instantâneo */
                 voice_synth_trigger_ex(&voice, VOICE_SQUEAK_STARTLED, 0.12f, 0.9f);
@@ -362,6 +379,65 @@ int main(void) {
             drives.stress = (drives.stress < 0.95) ? (drives.stress + 0.15) : 1.0;
             behavior_bond_on_shake(&bond);
             behavior_dmn_signal_activity(&dmn, t_now);
+        }
+
+        /* ── Percepção Avançada: Microfone (Som ambiente / palmas) ── */
+        sense_mic_update(&sense_mic, (float)dt);
+        if (sense_mic_is_loud(&sense_mic)) {
+            behavior_startle_relief_trigger(&startle_relief, 0.65f);
+            drives.stress = (drives.stress < 0.92) ? (drives.stress + 0.08) : 1.0;
+            workspace_submit_candidate(&workspace, STIMULUS_SPOKEN_WORD, fix_from_float(1.5f), current_tick);
+            behavior_dmn_signal_activity(&dmn, t_now);
+        }
+
+        /* ── Percepção Avançada: Leitura de Texto Contextual da Janela Ativa ── */
+        sense_text_update(&sense_text, (float)dt,
+#if defined(__linux__) && !defined(_WIN32)
+                          x11_get_display(),
+#else
+                          NULL,
+#endif
+                          (unsigned long)aw_id);
+        if (sense_text_has_new_word(&sense_text)) {
+            lexicon_observe_word(&lexicon, sense_text_get_last_word(&sense_text),
+                                 fix_from_float((float)emotion.valence),
+                                 fix_from_float((float)emotion.arousal), 1);
+        }
+
+        /* ── Resposta Bifásica Susto → Alívio ── */
+        float squish_relief = 0.0f, ser_boost = 0.0f;
+        if (behavior_startle_relief_update(&startle_relief, (float)dt, &squish_relief, &ser_boost)) {
+            /* Transição para Fase 2: Alívio progressivo e suspiro */
+            neuromod_inject_ser(&neuromod, fix_from_float(ser_boost));
+            if (t_now - voice_last_grunt > 4.0) {
+                voice_synth_trigger_ex(&voice, VOICE_GRUNT_IDLE, 0.35f, 0.5f);
+                voice_last_grunt = t_now;
+            }
+        }
+        if (squish_relief != 0.0f) {
+            softbody_squish(&sb, squish_relief * 0.4f);
+        }
+
+        /* ── Comportamentos Avançados: Se Esconder (Hide) / Caçar (Hunt) ── */
+        float hh_dx = 0.0f, hh_dy = 0.0f;
+        behavior_hide_hunt_update(&hide_hunt, (float)dt, (float)pet_x, (float)pet_y,
+                                  (float)cursor_x, (float)cursor_y,
+                                  aw_x, aw_y, aw_ww, aw_hh,
+                                  (float)drives.stress, (float)drives.energy, (float)drives.curiosity,
+                                  &hh_dx, &hh_dy);
+        if (hh_dx != 0.0f || hh_dy != 0.0f) {
+            pet_x += hh_dx;
+            pet_y += hh_dy;
+        }
+
+        /* ── Comportamento Avançado: Pouso no Galho/Topo da Janela (Perch) ── */
+        float perch_dx = 0.0f, perch_dy = 0.0f;
+        if (behavior_perch_update(&perch, (float)dt, (float)pet_x, (float)pet_y,
+                                  aw_x, aw_y, aw_ww, aw_hh,
+                                  (float)drives.energy, (float)drives.stress,
+                                  &perch_dx, &perch_dy)) {
+            pet_y += perch_dy;
+            if (perch_dx != 0.0f) pet_x += perch_dx;
         }
 
         /* Colisão com borda */
@@ -684,6 +760,7 @@ int main(void) {
     sensors_close(sensors);
     brain_destroy(brain);
     audio_out_close();
+    sense_mic_destroy(&sense_mic);
     if (sense_luma) sense_luma_destroy(sense_luma);
     window_destroy(win);
     return 0;

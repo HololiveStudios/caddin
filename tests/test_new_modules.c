@@ -10,6 +10,11 @@
 #include "behavior/behavior_dmn.h"
 #include "behavior/behavior_bond.h"
 #include "behavior/behavior_explore.h"
+#include "behavior/behavior_hide_hunt.h"
+#include "behavior/behavior_perch.h"
+#include "behavior/behavior_startle_relief.h"
+#include "sense/sense_mic.h"
+#include "sense/sense_text.h"
 
 /* ── sense_sysload ── */
 static void test_sysload(void) {
@@ -156,6 +161,93 @@ static void test_explore(void) {
     printf("  [OK] behavior_explore (activatable=%s)\n", activated ? "yes" : "no");
 }
 
+/* ── behavior_hide_hunt ── */
+static void test_hide_hunt(void) {
+    BehaviorHideHunt hh;
+    behavior_hide_hunt_init(&hh);
+    assert(hh.state == HIDE_HUNT_IDLE);
+
+    float dx = 0, dy = 0;
+    /* Com estresse alto (> 0.65), deve entrar em HIDE_HUNT_HIDING */
+    behavior_hide_hunt_update(&hh, 0.1f, 500, 300, 600, 300, 200, 100, 800, 600,
+                              0.85f, 0.5f, 0.5f, &dx, &dy);
+    assert(hh.state == HIDE_HUNT_HIDING);
+    assert(dx != 0.0f); /* Moveu em direção à borda */
+
+    /* Com baixo estresse e alta energia/curiosidade, stalkeia o cursor */
+    behavior_hide_hunt_init(&hh);
+    behavior_hide_hunt_update(&hh, 0.1f, 500, 300, 700, 300, 200, 100, 800, 600,
+                              0.10f, 0.80f, 0.70f, &dx, &dy);
+    assert(hh.state == HIDE_HUNT_STALKING);
+    printf("  [OK] behavior_hide_hunt\n");
+}
+
+/* ── behavior_perch ── */
+static void test_perch(void) {
+    BehaviorPerch p;
+    behavior_perch_init(&p);
+    assert(p.state == PERCH_STATE_FREE);
+
+    float dx = 0, dy = 0;
+    /* Próximo ao topo da janela (win_y = 300, target_y = 190, pet_y = 200) e calmo */
+    bool perched = behavior_perch_update(&p, 0.1f, 400, 200, 200, 300, 600, 400,
+                                         0.4f, 0.1f, &dx, &dy);
+    (void)perched;
+    assert(p.state == PERCH_STATE_APPROACHING);
+
+    /* Vários passos para concluir o alinhamento */
+    for (int i = 0; i < 20; ++i) {
+        behavior_perch_update(&p, 0.1f, 400, 190, 200, 300, 600, 400,
+                              0.4f, 0.1f, &dx, &dy);
+    }
+    assert(p.state == PERCH_STATE_PERCHED);
+    assert(p.is_perched);
+    printf("  [OK] behavior_perch\n");
+}
+
+/* ── behavior_startle_relief ── */
+static void test_startle_relief(void) {
+    BehaviorStartleRelief sr;
+    behavior_startle_relief_init(&sr);
+    assert(sr.phase == STARTLE_PHASE_CALM);
+
+    behavior_startle_relief_trigger(&sr, 0.9f);
+    assert(sr.phase == STARTLE_PHASE_SHOCK);
+
+    float squish = 0, ser_boost = 0;
+    bool relieved = false;
+    /* Executa durante 1.3s para disparar a transição para a Fase 2 (Alívio) */
+    for (int i = 0; i < 15; ++i) {
+        if (behavior_startle_relief_update(&sr, 0.1f, &squish, &ser_boost)) {
+            relieved = true;
+        }
+    }
+    assert(relieved);
+    assert(sr.phase == STARTLE_PHASE_RELIEF);
+    assert(ser_boost > 0.0f); /* Injeção de serotonina de alívio */
+
+    printf("  [OK] behavior_startle_relief (bifásico susto->alívio)\n");
+}
+
+/* ── sense_mic & sense_text ── */
+static void test_mic_and_text(void) {
+    SenseMic mic;
+    sense_mic_init(&mic, 16000);
+    /* Update gracioso mesmo sem microfone físico */
+    sense_mic_update(&mic, 0.016f);
+    float rms = sense_mic_get_rms(&mic);
+    assert(rms >= 0.0f && rms <= 1.0f);
+    sense_mic_destroy(&mic);
+
+    SenseText st;
+    sense_text_init(&st);
+    sense_text_update(&st, 0.6f, NULL, 0);
+    const char *w = sense_text_get_last_word(&st);
+    assert(w != NULL);
+
+    printf("  [OK] sense_mic e sense_text\n");
+}
+
 int main(void) {
     printf("=== test_new_modules ===\n");
     test_sysload();
@@ -163,6 +255,10 @@ int main(void) {
     test_dmn();
     test_bond();
     test_explore();
+    test_hide_hunt();
+    test_perch();
+    test_startle_relief();
+    test_mic_and_text();
     printf("=== TODOS OS TESTES PASSARAM ===\n");
     return 0;
 }

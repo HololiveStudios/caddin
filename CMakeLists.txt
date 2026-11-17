@@ -45,12 +45,15 @@ set(CORE_SRCS
     src/core/neuromod.c
     src/core/cpg.c
     src/core/predict.c
+    src/core/persist.c
     src/sense/sense_mouse.c
     src/sense/sense_scroll.c
     src/sense/sense_windows.c
     src/sense/sense_sysload.c
     src/sense/sense_luma.c
     src/sense/sense_heatmap.c
+    src/sense/sense_mic.c
+    src/sense/sense_text.c
     src/body/palette.c
     src/body/voice_synth.c
     src/body/audio_out.c
@@ -59,6 +62,9 @@ set(CORE_SRCS
     src/behavior/behavior_dmn.c
     src/behavior/behavior_bond.c
     src/behavior/behavior_explore.c
+    src/behavior/behavior_hide_hunt.c
+    src/behavior/behavior_perch.c
+    src/behavior/behavior_startle_relief.c
 )
 
 set(SRCS
@@ -104,7 +110,7 @@ target_link_libraries(caddin PRIVATE ${PLATFORM_LIBS})
 # ── Testes Headless Automatizados ──
 enable_testing()
 
-add_executable(test_core src/core/arena.c src/core/rng.c tests/test_core.c)
+add_executable(test_core src/core/arena.c src/core/rng.c src/core/persist.c tests/test_core.c)
 target_include_directories(test_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
 target_link_libraries(test_core PRIVATE m)
 add_test(NAME CoreTest COMMAND test_core)
@@ -137,9 +143,14 @@ add_test(NAME MindLangTest COMMAND test_mind_lang)
 add_executable(test_new_modules
     src/sense/sense_sysload.c
     src/sense/sense_heatmap.c
+    src/sense/sense_mic.c
+    src/sense/sense_text.c
     src/behavior/behavior_dmn.c
     src/behavior/behavior_bond.c
     src/behavior/behavior_explore.c
+    src/behavior/behavior_hide_hunt.c
+    src/behavior/behavior_perch.c
+    src/behavior/behavior_startle_relief.c
     tests/test_new_modules.c
 )
 target_include_directories(test_new_modules PRIVATE
@@ -148,5 +159,5 @@ target_include_directories(test_new_modules PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sense
     ${CMAKE_CURRENT_SOURCE_DIR}/src/behavior
 )
-target_link_libraries(test_new_modules PRIVATE m)
+target_link_libraries(test_new_modules PRIVATE m ${PLATFORM_LIBS})
 add_test(NAME NewModulesTest COMMAND test_new_modules)

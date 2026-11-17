@@ -7,7 +7,7 @@
 #define PESTINHA_CHANNELS 64
 #define PESTINHA_INTERNEURONS 32
 #define PESTINHA_MOTORS 24
-#define PESTINHA_NEURONS 1024
+#define PESTINHA_NEURONS 2048
 
 /* Sensoriais: 64 canais * 4 neurônios = 256
    Interneurônios: 32 pools * 18 neurônios = 576
