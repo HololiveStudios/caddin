@@ -219,6 +219,16 @@ int main(void) {
     static Canvas canvas;
     int16_t voice_pcm[512];
 
+    /* Cooldowns de voz — impedem re-trigger enquanto o som anterior ainda toca.
+     * Cada slot guarda o timestamp do último trigger para aquele tipo de voz. */
+    double voice_last_purr  = -99.0;
+    double voice_last_chirp = -99.0;
+    double voice_last_alarm = -99.0;
+    /* Duração mínima entre triggers (segundos) */
+    #define VOICE_COOLDOWN_PURR   3.0   /* ronron: longo, não repete antes de 3s */
+    #define VOICE_COOLDOWN_CHIRP  1.5   /* pio: re-ativa no máximo a cada 1.5s */
+    #define VOICE_COOLDOWN_ALARM  2.0   /* susto: cooldown de 2s */
+
     const double TARGET_DT = 1.0 / 60.0;
     double t_last = now_seconds();
     double sim_t  = 0.0;
@@ -334,7 +344,10 @@ int main(void) {
         fix16_t motor_jolt = 0;
         if (neuromod_check_nociceptive_reflex(&neuromod, shake_intensity, &motor_jolt)) {
             softbody_squish(&sb, 0.45f);
-            voice_synth_trigger(&voice, VOICE_ALARM, 0.20f);
+            if (t_now - voice_last_alarm > VOICE_COOLDOWN_ALARM) {
+                voice_synth_trigger(&voice, VOICE_ALARM, 0.20f);
+                voice_last_alarm = t_now;
+            }
             workspace_submit_candidate(&workspace, STIMULUS_VIOLENT_SHAKE, fix_from_float(2.5f), current_tick);
             lexicon_observe_word(&lexicon, "susto", fix_from_float(-0.9f), fix_from_float(0.9f), 2);
             drives.stress = (drives.stress < 0.95) ? (drives.stress + 0.15) : 1.0;
@@ -363,7 +376,6 @@ int main(void) {
         fix16_t surprise_ne = 0;
         if (predict_step(&predictor, current_tick, &surprise_ne)) {
             neuromod_inject_ne(&neuromod, surprise_ne);
-            voice_synth_trigger(&voice, VOICE_CHIRP, 0.15f);
             softbody_jiggle(&sb, 0.22f);
             workspace_submit_candidate(&workspace, STIMULUS_SURPRISE_MISMATCH, fix_from_float(1.8f), current_tick);
         }
@@ -480,10 +492,6 @@ int main(void) {
 
         if (m_purr > 0.25) {
             softbody_purr(&sb, (float)(m_purr * 2.0));
-            voice_synth_trigger(&voice, VOICE_PURR, 0.25f);
-        }
-        if (m_chirp > 0.35) {
-            voice_synth_trigger(&voice, VOICE_CHIRP, 0.15f);
         }
         if (m_tail > 0.30) {
             softbody_jiggle(&sb, (float)(m_tail * 0.15));
@@ -506,6 +514,33 @@ int main(void) {
         emot_update(&em, dt, dragging, speed, vx, clicked, bumped);
         emot_sync_brain(&em, brain);
 
+        /* ── Vocalização Orgânica: Dispara sons somente por emoções genuínas ── */
+        if (em.current == EMO_AFFECTION) {
+            /* Carinho suave / amor: ronrom relaxante */
+            if (t_now - voice_last_purr > VOICE_COOLDOWN_PURR) {
+                voice_synth_trigger(&voice, VOICE_PURR, 0.35f);
+                voice_last_purr = t_now;
+            }
+        } else if (em.current == EMO_CURIOUS) {
+            /* Curiosidade / toque pontual: pio fofo */
+            if (t_now - voice_last_chirp > VOICE_COOLDOWN_CHIRP) {
+                voice_synth_trigger(&voice, VOICE_CHIRP, 0.12f);
+                voice_last_chirp = t_now;
+            }
+        } else if (em.current == EMO_SURPRISED) {
+            /* Susto repentino ou arremesso rápido */
+            if (t_now - voice_last_chirp > 1.2) {
+                voice_synth_trigger(&voice, VOICE_CHIRP, 0.15f);
+                voice_last_chirp = t_now;
+            }
+        } else if (em.current == EMO_ANNOYED || em.current == EMO_DIZZY) {
+            /* Irritação por sacudida contínua na janela: reclamação expressiva */
+            if (t_now - voice_last_alarm > VOICE_COOLDOWN_ALARM) {
+                voice_synth_trigger(&voice, VOICE_ALARM, 0.22f);
+                voice_last_alarm = t_now;
+            }
+        }
+
         /* ── Autonomia: Passeio guiado pela SNN ── */
         autonomy_update(&autonomy, dt, win, &sb, &em, brain);
 
@@ -522,16 +557,16 @@ int main(void) {
         softbody_update(&sb, dt, target_sx, target_shear);
 
         /* ── Geração do buffer de áudio procedural ── */
-        voice_synth_render(&voice, voice_pcm, 512);
-        /* Fix 1: envia amostras para o dispositivo de áudio real */
-        if (audio_out_is_open()) {
-            audio_out_write(voice_pcm, 512);
+        size_t voice_samples = voice_synth_render(&voice, voice_pcm, 512);
+        /* Envia SOMENTE as amostras geradas (0 quando VOICE_IDLE = silêncio) */
+        if (audio_out_is_open() && voice_samples > 0) {
+            audio_out_write(voice_pcm, voice_samples);
         }
 
         /* ── DMN (Default Mode Network) — comportamentos ociosos espontâneos ── */
         {
             fix16_t arousal_dmn = sat_add16(neuromod.da, neuromod.ne);
-            DmnState dmn_state = behavior_dmn_update(&dmn, t_now, arousal_dmn, 15.0);
+            DmnState dmn_state = behavior_dmn_update(&dmn, t_now, arousal_dmn, 20.0);
             switch (dmn_state) {
             case DMN_YAWN:
                 softbody_stretch(&sb, 0.04f);
@@ -540,7 +575,10 @@ int main(void) {
                 softbody_jiggle(&sb, 0.06f);
                 break;
             case DMN_MICRO_CHIRP:
-                voice_synth_trigger(&voice, VOICE_CHIRP, 0.08f);
+                if (t_now - voice_last_chirp > 10.0) {
+                    voice_synth_trigger(&voice, VOICE_CHIRP, 0.08f);
+                    voice_last_chirp = t_now;
+                }
                 break;
             case DMN_LOOK_AROUND:
                 softbody_jiggle(&sb, 0.03f);
@@ -553,9 +591,12 @@ int main(void) {
         /* ── Bond — atualiza vínculo de longo prazo ── */
         behavior_bond_update(&bond, t_now, dt);
 
-        /* Bond: saudade → pede atenção com som */
-        if (behavior_bond_is_longing(&bond) && (current_tick % 300 == 0)) {
-            voice_synth_trigger(&voice, VOICE_CHIRP, 0.12f);
+        /* Bond: saudade prolongada → pede atenção discretamente a cada ~30s */
+        if (behavior_bond_is_longing(&bond) && (current_tick % 1800 == 0)) {
+            if (t_now - voice_last_chirp > 15.0) {
+                voice_synth_trigger(&voice, VOICE_CHIRP, 0.10f);
+                voice_last_chirp = t_now;
+            }
             softbody_jiggle(&sb, 0.05f);
         }
 

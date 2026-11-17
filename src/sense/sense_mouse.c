@@ -52,9 +52,9 @@ void sense_mouse_update(SenseMouse *sm, int mouse_x, int mouse_y, int pet_x, int
     sm->current_speed = fix_from_float(spd);
     sm->current_acceleration = fix_from_float(acc);
 
-    /* Contato e atrito físico com o corpo elástico */
-    int dx = mouse_x - (pet_x + pet_radius);
-    int dy = mouse_y - (pet_y + pet_radius);
+    /* Contato e atrito físico com o corpo elástico (pet_x, pet_y é o centro do pet) */
+    int dx = mouse_x - pet_x;
+    int dy = mouse_y - pet_y;
     float dist = sqrtf((float)(dx * dx + dy * dy));
 
     if (dist < (float)pet_radius) {
@@ -71,9 +71,12 @@ void sense_mouse_update(SenseMouse *sm, int mouse_x, int mouse_y, int pet_x, int
 
 fix16_t sense_mouse_get_shake_intensity(const SenseMouse *sm) {
     if (!sm) return 0;
-    /* Intensidade = aceleração + número de reversões acumuladas */
+    /* Sacudida real requer múltiplas reversões rápidas de direção (ao menos 3).
+     * Mover o mouse rápido em uma direção NÃO é sacudida. */
+    if (sm->shake_reversals < 3) return 0;
+
     fix16_t rev_factor = fix_from_int(sm->shake_reversals);
-    return sat_add16(sm->current_acceleration >> 2, rev_factor);
+    return sat_add16(sm->current_acceleration >> 3, rev_factor);
 }
 
 bool sense_mouse_is_rubbing(const SenseMouse *sm) {

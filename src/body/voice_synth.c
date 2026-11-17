@@ -27,20 +27,20 @@ void voice_synth_trigger(VoiceSynth *vs, VoiceType type, float duration_sec) {
 
     switch (type) {
         case VOICE_PURR:
-            vs->f0 = 65.0f;  /* Ronronar grave */
-            vs->f1 = 25.0f;  /* Tremor modulador */
+            vs->f0 = 68.0f;  /* Ronronar orgânico grave */
+            vs->f1 = 18.0f;  /* Modulação rítmica da garganta */
             break;
         case VOICE_CHIRP:
-            vs->f0 = 400.0f; /* Início de pergunta */
-            vs->f1 = 850.0f; /* Fim ascendente */
+            vs->f0 = 480.0f; /* Início do pio curioso */
+            vs->f1 = 820.0f; /* Final ascendente fofo */
             break;
         case VOICE_ALARM:
-            vs->f0 = 900.0f; /* Grito de alarme */
-            vs->f1 = 1200.0f;
+            vs->f0 = 580.0f; /* Guincho de protesto felino (não estridente) */
+            vs->f1 = 360.0f; /* Queda de tom expressiva */
             break;
         case VOICE_FORMANT:
-            vs->f0 = 220.0f; /* Frequência vocal fundamental de balbucio */
-            vs->f1 = 700.0f; /* Primeiro formante */
+            vs->f0 = 260.0f; /* Frequência vocal fundamental de balbucio */
+            vs->f1 = 650.0f; /* Formante suave */
             break;
         default:
             vs->total_samples = 0;
@@ -67,35 +67,42 @@ size_t voice_synth_render(VoiceSynth *vs, int16_t *out_buffer, size_t max_sample
 
         float sample = 0.0f;
 
+        float gain = 14000.0f;
+
         if (vs->current_type == VOICE_PURR) {
             /* Modulação de amplitude com frequência baixa */
             float carrier = sinf(vs->phase);
             float lfo = 0.5f + 0.5f * sinf(vs->mod_phase);
             sample = carrier * lfo;
+            gain = 11000.0f;
             vs->phase += 2.0f * (float)M_PI * vs->f0 * dt;
             vs->mod_phase += 2.0f * (float)M_PI * vs->f1 * dt;
         } else if (vs->current_type == VOICE_CHIRP) {
             /* Varredura linear ascendente de frequência */
             float current_f = vs->f0 + (vs->f1 - vs->f0) * t;
             sample = sinf(vs->phase);
+            gain = 12000.0f;
             vs->phase += 2.0f * (float)M_PI * current_f * dt;
         } else if (vs->current_type == VOICE_ALARM) {
-            /* Onda mista com harmônicos para sobressalto */
+            /* Queda de frequência expressiva com leve saturação (miado assustado) */
+            float current_f = vs->f0 + (vs->f1 - vs->f0) * t;
             float s1 = sinf(vs->phase);
-            float s2 = sinf(vs->phase * 1.5f);
-            sample = 0.6f * s1 + 0.4f * s2;
-            vs->phase += 2.0f * (float)M_PI * vs->f0 * dt;
+            float s2 = sinf(vs->phase * 2.0f);
+            sample = 0.7f * s1 + 0.3f * s2;
+            gain = 15000.0f;
+            vs->phase += 2.0f * (float)M_PI * current_f * dt;
         } else if (vs->current_type == VOICE_FORMANT) {
             /* Simulação de trato vocal de balbucio */
             float glottal = sinf(vs->phase);
             float formant = sinf(vs->mod_phase);
             sample = glottal * 0.4f + formant * 0.6f;
+            gain = 10000.0f;
             vs->phase += 2.0f * (float)M_PI * vs->f0 * dt;
             vs->mod_phase += 2.0f * (float)M_PI * vs->f1 * dt;
         }
 
         /* Normalização para int16_t */
-        float scaled = sample * env * 24000.0f;
+        float scaled = sample * env * gain;
         if (scaled > 32767.0f) scaled = 32767.0f;
         if (scaled < -32768.0f) scaled = -32768.0f;
 
