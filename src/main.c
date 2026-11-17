@@ -221,13 +221,21 @@ int main(void) {
 
     /* Cooldowns de voz — impedem re-trigger enquanto o som anterior ainda toca.
      * Cada slot guarda o timestamp do último trigger para aquele tipo de voz. */
-    double voice_last_purr  = -99.0;
-    double voice_last_chirp = -99.0;
-    double voice_last_alarm = -99.0;
+    double voice_last_purr   = -99.0;
+    double voice_last_chirp  = -99.0;
+    double voice_last_alarm  = -99.0;
+    double voice_last_trill  = -99.0;
+    double voice_last_whine  = -99.0;
+    double voice_last_growl  = -99.0;
+    double voice_last_grunt  = -99.0;
     /* Duração mínima entre triggers (segundos) */
-    #define VOICE_COOLDOWN_PURR   3.0   /* ronron: longo, não repete antes de 3s */
-    #define VOICE_COOLDOWN_CHIRP  1.5   /* pio: re-ativa no máximo a cada 1.5s */
-    #define VOICE_COOLDOWN_ALARM  2.0   /* susto: cooldown de 2s */
+    #define VOICE_COOLDOWN_PURR   3.0   /* ronron: não repete antes de 3s         */
+    #define VOICE_COOLDOWN_CHIRP  1.5   /* pio curioso: re-ativa a cada 1.5s       */
+    #define VOICE_COOLDOWN_ALARM  2.0   /* squeak/susto: cooldown de 2s            */
+    #define VOICE_COOLDOWN_TRILL  4.0   /* trilo de alegria: espaçado              */
+    #define VOICE_COOLDOWN_WHINE  5.0   /* reclamação/saudade: pouco frequente     */
+    #define VOICE_COOLDOWN_GROWL  2.5   /* growl raiva: cooldown moderado          */
+    #define VOICE_COOLDOWN_GRUNT 20.0   /* bocejo: raro e orgânico                 */
 
     const double TARGET_DT = 1.0 / 60.0;
     double t_last = now_seconds();
@@ -345,7 +353,8 @@ int main(void) {
         if (neuromod_check_nociceptive_reflex(&neuromod, shake_intensity, &motor_jolt)) {
             softbody_squish(&sb, 0.45f);
             if (t_now - voice_last_alarm > VOICE_COOLDOWN_ALARM) {
-                voice_synth_trigger(&voice, VOICE_ALARM, 0.20f);
+                /* Sacudida violenta → susto agudo instantâneo */
+                voice_synth_trigger_ex(&voice, VOICE_SQUEAK_STARTLED, 0.12f, 0.9f);
                 voice_last_alarm = t_now;
             }
             workspace_submit_candidate(&workspace, STIMULUS_VIOLENT_SHAKE, fix_from_float(2.5f), current_tick);
@@ -516,28 +525,63 @@ int main(void) {
 
         /* ── Vocalização Orgânica: Dispara sons somente por emoções genuínas ── */
         if (em.current == EMO_AFFECTION) {
-            /* Carinho suave / amor: ronrom relaxante */
-            if (t_now - voice_last_purr > VOICE_COOLDOWN_PURR) {
-                voice_synth_trigger(&voice, VOICE_PURR, 0.35f);
-                voice_last_purr = t_now;
+            /* Carinho — varia conforme duração do afeto:
+             *   < 1s  = surpresa gostosa de ser tocado  → chirp feliz
+             *   1-4s  = carinho moderado                → ronron suave
+             *   > 4s  = êxtase de afeto prolongado      → ronron profundo + trilo */
+            if (em.state_timer < 1.0f) {
+                if (t_now - voice_last_chirp > VOICE_COOLDOWN_CHIRP) {
+                    voice_synth_trigger_ex(&voice, VOICE_CHIRP_HAPPY, 0.22f, 0.75f);
+                    voice_last_chirp = t_now;
+                }
+            } else if (em.state_timer < 4.0f) {
+                if (t_now - voice_last_purr > VOICE_COOLDOWN_PURR) {
+                    voice_synth_trigger_ex(&voice, VOICE_PURR_CONTENT, 0.40f,
+                                           (float)(em.state_timer / 4.0f));
+                    voice_last_purr = t_now;
+                }
+            } else {
+                if (t_now - voice_last_purr > VOICE_COOLDOWN_PURR) {
+                    voice_synth_trigger_ex(&voice, VOICE_PURR_DEEP, 0.50f, 0.9f);
+                    voice_last_purr = t_now;
+                }
+                /* Trilo de alegria esporádico no êxtase */
+                if (t_now - voice_last_trill > VOICE_COOLDOWN_TRILL) {
+                    voice_synth_trigger_ex(&voice, VOICE_TRILL, 0.42f, 0.8f);
+                    voice_last_trill = t_now;
+                }
             }
         } else if (em.current == EMO_CURIOUS) {
-            /* Curiosidade / toque pontual: pio fofo */
+            /* Curiosidade: pio interrogativo ascendente */
             if (t_now - voice_last_chirp > VOICE_COOLDOWN_CHIRP) {
-                voice_synth_trigger(&voice, VOICE_CHIRP, 0.12f);
+                voice_synth_trigger_ex(&voice, VOICE_CHIRP_CURIOUS, 0.18f, 0.65f);
                 voice_last_chirp = t_now;
             }
         } else if (em.current == EMO_SURPRISED) {
-            /* Susto repentino ou arremesso rápido */
-            if (t_now - voice_last_chirp > 1.2) {
-                voice_synth_trigger(&voice, VOICE_CHIRP, 0.15f);
-                voice_last_chirp = t_now;
-            }
-        } else if (em.current == EMO_ANNOYED || em.current == EMO_DIZZY) {
-            /* Irritação por sacudida contínua na janela: reclamação expressiva */
+            /* Susto repentino: squeak agudo instantâneo */
             if (t_now - voice_last_alarm > VOICE_COOLDOWN_ALARM) {
-                voice_synth_trigger(&voice, VOICE_ALARM, 0.22f);
+                voice_synth_trigger_ex(&voice, VOICE_SQUEAK_STARTLED, 0.10f, 0.85f);
                 voice_last_alarm = t_now;
+            }
+        } else if (em.current == EMO_ANNOYED) {
+            /* Irritação — escalada: curta → growl, longa → hiss */
+            if (em.state_timer < 2.0f) {
+                if (t_now - voice_last_growl > VOICE_COOLDOWN_GROWL) {
+                    voice_synth_trigger_ex(&voice, VOICE_GROWL_ANNOYED, 0.28f,
+                                           (float)(em.state_timer / 2.0f));
+                    voice_last_growl = t_now;
+                }
+            } else {
+                if (t_now - voice_last_alarm > VOICE_COOLDOWN_ALARM) {
+                    voice_synth_trigger_ex(&voice, VOICE_HISS_ANGRY, 0.08f, 0.9f);
+                    voice_last_alarm = t_now;
+                }
+            }
+        } else if (em.current == EMO_DIZZY) {
+            /* Tontura/desconforto: reclamação suave */
+            if (t_now - voice_last_whine > VOICE_COOLDOWN_WHINE) {
+                voice_synth_trigger_ex(&voice, VOICE_WHINE_PROTEST, 0.30f, 0.6f);
+                voice_last_whine = t_now;
             }
         }
 
@@ -570,14 +614,20 @@ int main(void) {
             switch (dmn_state) {
             case DMN_YAWN:
                 softbody_stretch(&sb, 0.04f);
+                /* Bocejo: som sonolento e orgânico */
+                if (t_now - voice_last_grunt > VOICE_COOLDOWN_GRUNT) {
+                    voice_synth_trigger_ex(&voice, VOICE_GRUNT_IDLE, 0.45f, 0.4f);
+                    voice_last_grunt = t_now;
+                }
                 break;
             case DMN_GROOMING:
                 softbody_jiggle(&sb, 0.06f);
                 break;
             case DMN_MICRO_CHIRP:
-                if (t_now - voice_last_chirp > 10.0) {
-                    voice_synth_trigger(&voice, VOICE_CHIRP, 0.08f);
-                    voice_last_chirp = t_now;
+                /* Chirp autônomo de curiosidade/vivacidade */
+                if (t_now - voice_last_trill > 10.0) {
+                    voice_synth_trigger_ex(&voice, VOICE_TRILL, 0.42f, 0.5f);
+                    voice_last_trill = t_now;
                 }
                 break;
             case DMN_LOOK_AROUND:
@@ -593,9 +643,10 @@ int main(void) {
 
         /* Bond: saudade prolongada → pede atenção discretamente a cada ~30s */
         if (behavior_bond_is_longing(&bond) && (current_tick % 1800 == 0)) {
-            if (t_now - voice_last_chirp > 15.0) {
-                voice_synth_trigger(&voice, VOICE_CHIRP, 0.10f);
-                voice_last_chirp = t_now;
+            /* Saudade prolongada: reclamação suave de quem está sendo ignorado */
+            if (t_now - voice_last_whine > VOICE_COOLDOWN_WHINE) {
+                voice_synth_trigger_ex(&voice, VOICE_WHINE_PROTEST, 0.35f, 0.55f);
+                voice_last_whine = t_now;
             }
             softbody_jiggle(&sb, 0.05f);
         }

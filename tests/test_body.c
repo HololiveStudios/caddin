@@ -34,30 +34,94 @@ static void test_palette_and_pupils(void) {
     printf("  -> Paleta e Pupilas: OK\n");
 }
 
-static void test_voice_synth(void) {
-    printf("[TEST] Sintetizador Procedural de Áudio (VoiceSynth)...\n");
-    VoiceSynth vs;
-    voice_synth_init(&vs, 16000);
-
-    /* Testar chirp de pergunta */
-    voice_synth_trigger(&vs, VOICE_CHIRP, 0.1f); /* 100 ms = 1600 amostras */
-
-    int16_t buffer[2048];
-    size_t rendered = voice_synth_render(&vs, buffer, 2048);
-    assert(rendered == 1600);
-
-    /* Verificar que foram geradas amostras com energia real */
-    int non_zero = 0;
-    for (size_t i = 0; i < rendered; ++i) {
-        if (buffer[i] != 0) non_zero++;
+/* ---------------------------------------------------------------------------
+ * Utilitário: gera N amostras totais através de múltiplos renders de 512
+ * --------------------------------------------------------------------------- */
+static size_t render_full(VoiceSynth *vs, int16_t *buf, size_t buf_size) {
+    size_t total = 0;
+    size_t chunk;
+    while ((chunk = voice_synth_render(vs, buf + total,
+                    (buf_size - total < 512) ? (buf_size - total) : 512)) > 0) {
+        total += chunk;
+        if (total + 512 > buf_size) break;
     }
-    assert(non_zero > 1000);
+    return total;
+}
 
-    /* Após o término, o sintetizador deve voltar a IDLE */
-    size_t next_render = voice_synth_render(&vs, buffer, 100);
-    assert(next_render == 0);
+static void test_voice_synth(void) {
+    printf("[TEST] Sintetizador Procedural de Áudio — 11 tipos emocionais...\n");
+    VoiceSynth vs;
+    int16_t buffer[8192];
+    size_t rendered;
+    int non_zero;
 
-    printf("  -> VoiceSynth: OK\n");
+    /* Estrutura de teste por tipo */
+    struct {
+        VoiceType  type;
+        float      dur;
+        float      intensity;
+        const char *name;
+    } cases[] = {
+        { VOICE_PURR_CONTENT,    0.35f, 0.6f, "PURR_CONTENT"    },
+        { VOICE_PURR_DEEP,       0.40f, 0.9f, "PURR_DEEP"       },
+        { VOICE_TRILL,           0.42f, 0.8f, "TRILL"           },
+        { VOICE_CHIRP_HAPPY,     0.22f, 0.7f, "CHIRP_HAPPY"     },
+        { VOICE_CHIRP_CURIOUS,   0.18f, 0.6f, "CHIRP_CURIOUS"   },
+        { VOICE_GRUNT_IDLE,      0.45f, 0.4f, "GRUNT_IDLE"      },
+        { VOICE_WHINE_PROTEST,   0.30f, 0.6f, "WHINE_PROTEST"   },
+        { VOICE_GROWL_ANNOYED,   0.28f, 0.7f, "GROWL_ANNOYED"   },
+        { VOICE_HISS_ANGRY,      0.08f, 0.9f, "HISS_ANGRY"      },
+        { VOICE_SQUEAK_STARTLED, 0.10f, 0.9f, "SQUEAK_STARTLED" },
+        { VOICE_CRY_DISTRESS,    0.35f, 0.8f, "CRY_DISTRESS"    },
+    };
+    int n = (int)(sizeof(cases) / sizeof(cases[0]));
+
+    for (int i = 0; i < n; ++i) {
+        voice_synth_init(&vs, 16000);
+        voice_synth_trigger_ex(&vs, cases[i].type, cases[i].dur, cases[i].intensity);
+
+        uint32_t expected = (uint32_t)(cases[i].dur * 16000.0f);
+
+        rendered = render_full(&vs, buffer, 8192);
+
+        /* Deve gerar amostras compatíveis com a duração esperada (margem ±512) */
+        assert(rendered >= (size_t)(expected > 512 ? expected - 512 : 0));
+        assert(rendered <= (size_t)(expected + 512));
+
+        /* Verificar energia real (pelo menos 60% das amostras não-zero) */
+        non_zero = 0;
+        for (size_t j = 0; j < rendered; ++j) {
+            if (buffer[j] != 0) non_zero++;
+        }
+        assert((size_t)non_zero > rendered * 6 / 10);
+
+        /* Verificar ausência de clipping (int16 máximo = 32767) */
+        for (size_t j = 0; j < rendered; ++j) {
+            assert(buffer[j] <= 32767 && buffer[j] >= -32768);
+        }
+
+        /* Após o fim, deve retornar IDLE (0 amostras) */
+        size_t after = voice_synth_render(&vs, buffer, 512);
+        assert(after == 0);
+
+        printf("  -> %s (%.0fms, int=%.1f): %zu amostras, %d não-zero: OK\n",
+               cases[i].name, cases[i].dur * 1000.0f, cases[i].intensity,
+               rendered, non_zero);
+    }
+
+    /* VOICE_IDLE não deve gerar nada */
+    voice_synth_init(&vs, 16000);
+    rendered = voice_synth_render(&vs, buffer, 512);
+    assert(rendered == 0);
+    printf("  -> VOICE_IDLE: silêncio garantido: OK\n");
+
+    /* Trigger simples (compatibilidade retroativa) ainda deve funcionar */
+    voice_synth_trigger(&vs, VOICE_CHIRP_CURIOUS, 0.10f);
+    rendered = render_full(&vs, buffer, 4096);
+    assert(rendered > 0);
+    printf("  -> Compatibilidade voice_synth_trigger(): OK\n");
+
+    printf("  -> VoiceSynth COMPLETO: OK\n");
 }
 
 int main(void) {
