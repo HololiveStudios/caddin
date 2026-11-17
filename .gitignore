@@ -1,8 +1,10 @@
 build/
 build-windows/
 dist/
+bin/
 *.o
 *.brain
 .DS_Store
+ignore/
 tests/test_*
 !tests/*.c

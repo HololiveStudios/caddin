@@ -18,6 +18,21 @@
 #include "sensors.h"
 #include "runtime_types.h"
 
+/* novos módulos de biologia, mente e percepção */
+#include "core/fixed.h"
+#include "core/arena.h"
+#include "core/rng.h"
+#include "core/neuromod.h"
+#include "core/cpg.h"
+#include "core/predict.h"
+#include "sense/sense_mouse.h"
+#include "sense/sense_scroll.h"
+#include "sense/sense_windows.h"
+#include "body/palette.h"
+#include "body/voice_synth.h"
+#include "mind/workspace.h"
+#include "lang/lexicon.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -120,6 +135,27 @@ int main(void) {
     conditioning_init(&cond);
     memory_init(&memory);
 
+    /* ── novos subsistemas: biologia, percepção e mente ── */
+    SenseMouse              sense_mouse;
+    SenseScroll             sense_scroll;
+    SenseWindows            sense_windows;
+    Neuromodulators         neuromod;
+    CentralPatternGenerator cpg;
+    TemporalPredictor       predictor;
+    GlobalWorkspace         workspace;
+    Lexicon                 lexicon;
+    VoiceSynth              voice;
+
+    sense_mouse_init(&sense_mouse);
+    sense_scroll_init(&sense_scroll);
+    sense_windows_init(&sense_windows);
+    neuromod_init(&neuromod);
+    cpg_init(&cpg);
+    predict_init(&predictor);
+    workspace_init(&workspace);
+    lexicon_init(&lexicon);
+    voice_synth_init(&voice, 16000);
+
     /* ── animação, soft-body e emoções reativas ── */
     AnimState anim;
     anim_init(&anim);
@@ -134,11 +170,13 @@ int main(void) {
     autonomy_init(&autonomy);
 
     static Canvas canvas;
+    int16_t voice_pcm[512];
 
     const double TARGET_DT = 1.0 / 60.0;
     double t_last = now_seconds();
     double sim_t  = 0.0;
     double last_save_t = 0.0;
+    uint32_t current_tick = 0;
 
     while (g_running && !window_should_close(win)) {
 
@@ -147,6 +185,7 @@ int main(void) {
         if (dt > 0.1) dt = 0.1;
         t_last = t_now;
         sim_t += dt;
+        current_tick++;
 
         window_poll_events(win);
         window_update_physics(win, dt);
@@ -158,30 +197,76 @@ int main(void) {
         double vx     = window_get_vx(win);
         double vy     = window_get_vy(win);
 
-        /* ══════════════════════════════════════════════════
-         * CAMADA 1: Captação de Eventos → Sensores
-         * Nenhuma ação direta sobre drives/emoções aqui.
-         * Tudo flui pelos canais sensoriais da SNN.
-         * ══════════════════════════════════════════════════ */
+        int pet_x = 0, pet_y = 0;
+        window_get_pos(win, &pet_x, &pet_y);
 
-        /* Colisão com borda → registrado nos sensores (bumped=true) */
+        int cursor_x = 0, cursor_y = 0;
+        {
+            extern bool x11_get_screen_cursor(int *out_x, int *out_y);
+            x11_get_screen_cursor(&cursor_x, &cursor_y);
+        }
+
+        /* ══════════════════════════════════════════════════
+         * CAMADA 1: Percepção SO Avançada & Sensores
+         * ══════════════════════════════════════════════════ */
+        sense_mouse_update(&sense_mouse, cursor_x, cursor_y, pet_x, pet_y, 40);
+        sense_scroll_step(&sense_scroll);
+
+        /* Detecção de quina perigosa (botão fechar) */
+        if (sense_windows_is_near_danger_zone(&sense_windows, pet_x, pet_y, 45)) {
+            neuromod_inject_ne(&neuromod, fix_from_float(0.04f));
+            neuromod_inject_cort(&neuromod, fix_from_float(0.02f));
+            softbody_stretch(&sb, 0.10f);
+        }
+
+        /* Detecção de atrito e carinho suave */
+        if (sense_mouse_is_rubbing(&sense_mouse)) {
+            neuromod_inject_da(&neuromod, fix_from_float(0.03f));
+            neuromod_inject_ser(&neuromod, fix_from_float(0.02f));
+            workspace_submit_candidate(&workspace, STIMULUS_MOUSE_TOUCH, fix_from_float(1.2f), current_tick);
+            drives.affection = (drives.affection < 0.98) ? (drives.affection + 0.005) : 1.0;
+        }
+
+        /* Reflexo Nociceptivo Espinhal (Sacudida violenta) */
+        fix16_t shake_intensity = sense_mouse_get_shake_intensity(&sense_mouse);
+        fix16_t motor_jolt = 0;
+        if (neuromod_check_nociceptive_reflex(&neuromod, shake_intensity, &motor_jolt)) {
+            softbody_squish(&sb, 0.45f);
+            voice_synth_trigger(&voice, VOICE_ALARM, 0.20f);
+            workspace_submit_candidate(&workspace, STIMULUS_VIOLENT_SHAKE, fix_from_float(2.5f), current_tick);
+            lexicon_observe_word(&lexicon, "susto", fix_from_float(-0.9f), fix_from_float(0.9f), 2);
+            drives.stress = (drives.stress < 0.95) ? (drives.stress + 0.15) : 1.0;
+        }
+
+        /* Colisão com borda */
         if (bumped) {
             softbody_squish(&sb, 0.38f);
         }
 
-        /* Clique direto → jiggle cosmético + registrado nos sensores */
+        /* Clique direto */
         if (clicked) {
             softbody_jiggle(&sb, 0.40f);
+            fix16_t reward_da = 0;
+            predict_register_event(&predictor, current_tick, &reward_da);
+            if (reward_da > 0) {
+                neuromod_inject_da(&neuromod, reward_da);
+            }
         }
 
-        /* ── Teclado: registra nos sensores, sem atalhos de comportamento ── */
-        char last_key = 0;
+        /* Predição Temporal: Mismatch Spikes (Surpresa) */
+        fix16_t surprise_ne = 0;
+        if (predict_step(&predictor, current_tick, &surprise_ne)) {
+            neuromod_inject_ne(&neuromod, surprise_ne);
+            voice_synth_trigger(&voice, VOICE_CHIRP, 0.15f);
+            softbody_jiggle(&sb, 0.22f);
+            workspace_submit_candidate(&workspace, STIMULUS_SURPRISE_MISMATCH, fix_from_float(1.8f), current_tick);
+        }
+
+        /* ── Teclado ── */
         char key;
         while ((key = window_read_char(win)) != 0) {
-            last_key = key;
             sensors_register_key(sensors, key, sim_t);
 
-            /* Efeitos puramente cosméticos/físicos (não alteram humor) */
             switch (key) {
             case KEY_SPACE:
                 window_apply_impulse(win, 0.0, -680.0);
@@ -212,81 +297,86 @@ int main(void) {
         }
 
         /* ── Alimenta dados de física da janela nos sensores ── */
-        int pet_x = 0, pet_y = 0;
-        window_get_pos(win, &pet_x, &pet_y);
-
-        int cursor_x = 0, cursor_y = 0;
-        /* Reutiliza x11_get_screen_cursor se disponível */
-        {
-            extern bool x11_get_screen_cursor(int *out_x, int *out_y);
-            x11_get_screen_cursor(&cursor_x, &cursor_y);
-        }
-
         sensors_feed_physics(sensors, dt,
                              dragging, vx, vy, speed,
                              clicked, bumped,
                              cursor_x, cursor_y, pet_x, pet_y);
 
-        /* ── Alimenta drives interoceptivos nos sensores ── */
         sensors_feed_drives(sensors, &drives, cond.reward_trace, cond.punishment_trace);
 
         /* ══════════════════════════════════════════════════
-         * CAMADA 2+3: Sensores → SNN (1024 neurônios LIF)
+         * CAMADA 2: SNN LIF + CPG + Biologia
          * ══════════════════════════════════════════════════ */
         double inputs[PESTINHA_CHANNELS] = {0};
         SensorReading sr = {0};
         sensors_poll(sensors, sim_t, &sr, inputs);
 
+        /* Aplica ganho sensorial modulado pela Noradrenalina */
+        fix16_t sens_gain = neuromod_get_sensory_gain(&neuromod);
+        float f_gain = fix_to_float(sens_gain);
+        for (int i = 0; i < PESTINHA_CHANNELS; ++i) {
+            inputs[i] *= (double)f_gain;
+            if (inputs[i] > 1.0) inputs[i] = 1.0;
+        }
+
         brain_stimulate(brain, inputs);
         brain_step(brain, dt * 1000.0);
 
+        /* Passo do CPG (Respiração biológica e batimento) */
+        fix16_t arousal_stress = sat_add16(neuromod.cort, neuromod.ne);
+        cpg_step(&cpg, arousal_stress, (uint32_t)brain_active_spike_count(brain), PESTINHA_NEURONS);
+        neuromod_step(&neuromod);
+        workspace_step(&workspace, current_tick);
+
         /* ══════════════════════════════════════════════════
-         * CAMADA 4: Neuromodulação Endógena + STDP
-         * O fator de recompensa agora é computado a partir
-         * dos drives internos, não de atalhos de teclado.
+         * CAMADA 3: Neuromodulação Endógena + STDP
          * ══════════════════════════════════════════════════ */
-        double endogenous_reward = homeostasis_compute_reward(&drives);
+        double endogenous_reward = homeostasis_compute_reward(&drives) + fix_to_float(neuromod.da - neuromod.base_da);
         double reward_factor = endogenous_reward
                              + cond.reward_trace - cond.punishment_trace;
-        /* Limitar entre -1.5 e +1.5 para evitar explosão plástica */
         if (reward_factor > 1.5) reward_factor = 1.5;
         if (reward_factor < -1.5) reward_factor = -1.5;
 
         brain_learn_stdp(brain, reward_factor, dt);
 
-        /* Atualiza conditioning traces com decaimento (sem injeção direta) */
-        /* Agora o conditioning é modulado pelos sensores em vez de teclas */
-        if (inputs[22] > 0.3) {  /* Canal REWARD ativo */
+        if (inputs[22] > 0.3) {
             conditioning_reward(&cond, inputs[22] * 0.3 * dt);
         }
-        if (inputs[23] > 0.3) {  /* Canal PUNISH ativo */
+        if (inputs[23] > 0.3) {
             conditioning_punish(&cond, inputs[23] * 0.3 * dt);
         }
         conditioning_update(&cond, dt);
 
         /* ══════════════════════════════════════════════════
-         * CAMADA 5: Motores Neurais → Comportamento + Física
+         * CAMADA 4: Motores Neurais → Comportamento + Softbody
          * ══════════════════════════════════════════════════ */
-
-        /* A. Homeostase atualizada pelos inputs sensoriais */
         homeostasis_update(&drives, &behavior, dt,
                            behavior.wandering ? 1 : 0,
                            emotion.arousal, inputs);
 
-        /* B. Comportamento decidido pelos motores neurais */
         behavior_update(&behavior, &drives, &cond, brain, sim_t, dt);
         behavior_update_emotion(&emotion, &behavior, brain, sim_t, dt);
 
-        /* C. Efeitos soft-body decididos pelos motores neurais */
+        /* Consolidação durante o sono */
+        if (behavior.asleep) {
+            lexicon_consolidate_sleep(&lexicon);
+        }
+
+        /* Efeitos soft-body e voz procedurais */
         double m_purr = brain_motor(brain, M_PURR_EFFECT);
         double m_tail = brain_motor(brain, M_TAIL_WAG);
         double m_nod  = brain_motor(brain, M_NOD_HEAD);
         double m_shake_h = brain_motor(brain, M_SHAKE_HEAD);
         double m_jump = brain_motor(brain, M_JUMP_ACTION);
         double m_dance = brain_motor(brain, M_DANCE_ACTION);
+        double m_chirp = brain_motor(brain, M_CHIRP_SOUND);
 
         if (m_purr > 0.25) {
             softbody_purr(&sb, (float)(m_purr * 2.0));
+            voice_synth_trigger(&voice, VOICE_PURR, 0.25f);
+        }
+        if (m_chirp > 0.35) {
+            voice_synth_trigger(&voice, VOICE_CHIRP, 0.15f);
         }
         if (m_tail > 0.30) {
             softbody_jiggle(&sb, (float)(m_tail * 0.15));
@@ -305,15 +395,16 @@ int main(void) {
             softbody_jiggle(&sb, (float)(m_dance * 0.10));
         }
 
-        /* ── Emoções Reativas: física + sincronização neural com a SNN ── */
+        /* ── Emoções Reativas ── */
         emot_update(&em, dt, dragging, speed, vx, clicked, bumped);
         emot_sync_brain(&em, brain);
 
-        /* ── Autonomia: Passeio na tela e observação do cursor guiados pela SNN ── */
+        /* ── Autonomia: Passeio guiado pela SNN ── */
         autonomy_update(&autonomy, dt, win, &sb, &em, brain);
 
-        /* ── Deformação Soft-body Alvo com base no arraste/inércia ── */
-        float target_sx = 1.0f;
+        /* ── Acoplamento do CPG (Respiração Visível) ao Softbody ── */
+        float breath_expansion = fix_to_float(cpg_get_breath_expansion(&cpg));
+        float target_sx = 1.0f + breath_expansion * 0.35f;
         float target_shear = 0.0f;
         if (dragging) {
             target_shear = (float)(-vx * 0.00065);
@@ -323,11 +414,13 @@ int main(void) {
         }
         softbody_update(&sb, dt, target_sx, target_shear);
 
-        /* ── Animação base ── */
+        /* ── Geração do buffer de áudio procedural ── */
+        voice_synth_render(&voice, voice_pcm, 512);
+
+        /* ── Animação e Renderização ── */
         anim_sync_brain(&anim, brain, &drives, &emotion);
         anim_update(&anim, dt);
 
-        /* ── Renderização com Física Soft-Body e Emoções Reativas ── */
         face_draw_squishy(canvas, &anim.current, anim.bob_y, anim.blink_lid, &sb, &em);
         window_present(win, canvas);
 
