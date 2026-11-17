@@ -27,9 +27,26 @@ else()
     )
 endif()
 
+set(CORE_SRCS
+    src/core/arena.c
+    src/core/rng.c
+    src/core/snn.c
+    src/core/neuromod.c
+    src/core/cpg.c
+    src/core/predict.c
+    src/sense/sense_mouse.c
+    src/sense/sense_scroll.c
+    src/sense/sense_windows.c
+    src/body/palette.c
+    src/body/voice_synth.c
+    src/mind/workspace.c
+    src/lang/lexicon.c
+)
+
 set(SRCS
     src/main.c
     ${PLATFORM_SRCS}
+    ${CORE_SRCS}
     src/renderer/pixel_draw.c
     src/renderer/face.c
     src/animation/animation.c
@@ -49,6 +66,11 @@ add_executable(caddin ${SRCS})
 target_include_directories(caddin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sense
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/body
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mind
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/lang
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platform
     ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer
     ${CMAKE_CURRENT_SOURCE_DIR}/src/animation
@@ -59,3 +81,36 @@ if(NOT WIN32)
 endif()
 
 target_link_libraries(caddin PRIVATE ${PLATFORM_LIBS})
+
+# ── Testes Headless Automatizados ──
+enable_testing()
+
+add_executable(test_core src/core/arena.c src/core/rng.c tests/test_core.c)
+target_include_directories(test_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(test_core PRIVATE m)
+add_test(NAME CoreTest COMMAND test_core)
+
+add_executable(test_snn src/core/arena.c src/core/rng.c src/core/snn.c tests/test_snn.c)
+target_include_directories(test_snn PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(test_snn PRIVATE m)
+add_test(NAME SnnTest COMMAND test_snn)
+
+add_executable(test_biology src/core/neuromod.c src/core/cpg.c src/core/predict.c tests/test_biology.c)
+target_include_directories(test_biology PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(test_biology PRIVATE m)
+add_test(NAME BiologyTest COMMAND test_biology)
+
+add_executable(test_sensors src/sense/sense_mouse.c src/sense/sense_scroll.c src/sense/sense_windows.c tests/test_sensors.c)
+target_include_directories(test_sensors PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core ${CMAKE_CURRENT_SOURCE_DIR}/src/sense)
+target_link_libraries(test_sensors PRIVATE m)
+add_test(NAME SensorsTest COMMAND test_sensors)
+
+add_executable(test_body src/core/neuromod.c src/body/palette.c src/body/voice_synth.c tests/test_body.c)
+target_include_directories(test_body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core ${CMAKE_CURRENT_SOURCE_DIR}/src/body)
+target_link_libraries(test_body PRIVATE m)
+add_test(NAME BodyTest COMMAND test_body)
+
+add_executable(test_mind_lang src/mind/workspace.c src/lang/lexicon.c tests/test_mind_lang.c)
+target_include_directories(test_mind_lang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core ${CMAKE_CURRENT_SOURCE_DIR}/src/mind ${CMAKE_CURRENT_SOURCE_DIR}/src/lang)
+target_link_libraries(test_mind_lang PRIVATE m)
+add_test(NAME MindLangTest COMMAND test_mind_lang)

@@ -1,8 +1,11 @@
-.PHONY: all clean run windows
+.PHONY: all clean run windows test
 
 all:
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && $(MAKE)
+
+test: all
+	@cd build && ctest --output-on-failure
 
 windows:
 	@cmake -S . -B build-windows -G Ninja \

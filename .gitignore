@@ -1,5 +1,8 @@
 build/
 build-windows/
+dist/
 *.o
 *.brain
 .DS_Store
+tests/test_*
+!tests/*.c
