@@ -26,7 +26,7 @@ struct Brain {
     const char *names[NPOOLS];
 
     float w[PESTINHA_NEURONS * NL];     /* matriz de conexões sinápticas */
-    float w0[PESTINHA_NEURONS * NL];    /* pesos originais base para homeostase */
+    int8_t w0[PESTINHA_NEURONS * NL];   /* pesos originais base quantizados para homeostase (768 KB em vez de 3.15 MB) */
 
     double v[NL];                       /* potencial de membrana (LIF) */
     double adapt[NL];
@@ -96,7 +96,10 @@ static void connect_pools(Brain *b, const char *pre, const char *post, double we
                 int col = post_idx - NS;
                 int pos = pre_idx * NL + col;
                 b->w[pos] = (float)weight;
-                b->w0[pos] = (float)weight;
+                int q = (int)round(weight * 127.0);
+                if (q > 127) q = 127;
+                if (q < -128) q = -128;
+                b->w0[pos] = (int8_t)q;
             }
         }
     }
@@ -356,8 +359,8 @@ void brain_learn_stdp(Brain *b, double reward_factor, double dt_sec) {
             /* Atualiza o peso sináptico */
             float w_new = (float)(w_cur + dw);
 
-            /* Homeostase Sináptica: relaxamento em direção ao peso base w0 */
-            float w_base = b->w0[offset + j];
+            /* Homeostase Sináptica: relaxamento em direção ao peso base w0 quantizado */
+            float w_base = (float)b->w0[offset + j] * (1.0f / 127.0f);
             w_new = (float)(w_new * decay_homeo + w_base * (1.0 - decay_homeo));
 
             /* Limites sinápticos */

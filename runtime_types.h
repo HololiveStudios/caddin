@@ -31,15 +31,6 @@ typedef struct {
     int current_emotion;
 } Emotion;
 
-typedef struct {
-    int current_face;
-    const char *face_str;
-    const char *status_msg;
-    double face_timer;
-    double action_msg_timer;    /* Tempo restante para exibir a mensagem de ação (em segundos) */
-    char action_msg[128];       /* Mensagem de resposta a ações diretas do usuário */
-    char last_key_pressed;      /* Última tecla capturada */
-} FaceState;
 
 typedef struct {
     bool asleep;

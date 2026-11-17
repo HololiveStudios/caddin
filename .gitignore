@@ -1,0 +1,5 @@
+build/
+build-windows/
+*.o
+*.brain
+.DS_Store

@@ -1,24 +1,18 @@
-CC ?= gcc
-CFLAGS ?= -O2 -std=c99 -Wall -Wextra -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L
-LDFLAGS ?= -lm
+.PHONY: all clean run windows
 
-SRCS = pestinha.c neuro.c homeostasis.c behavior.c conditioning.c memory.c sensors.c terminal_ui.c
-OBJS = $(SRCS:.c=.o)
-TARGET = pestinha_term
+all:
+	@mkdir -p build
+	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && $(MAKE)
 
-all: $(TARGET)
-
-$(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
-	@echo "Build concluida com sucesso: $(TARGET)"
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+windows:
+	@cmake -S . -B build-windows -G Ninja \
+		-DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc"
+	@cmake --build build-windows
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -rf build build-windows dist
 
 run: all
-	./$(TARGET)
-
-.PHONY: all clean run
+	./build/caddin
