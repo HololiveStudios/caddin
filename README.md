@@ -11,7 +11,7 @@ Com um **motor 2D ultraleve** com física softbody procedural, janela translúci
 ## 📑 Sumário
 
 1. [Destaques da Versão 1.1.6](#-destaques-da-versão-116)
-2. [Histórico de Versões](#-histórico-de-versões)
+2. [Histórico de Versões e Contagem de Neurônios](#-histórico-de-versões-e-contagem-de-neurônios)
 3. [Diagramas de Arquitetura](#-diagramas-de-arquitetura)
 4. [Arquitetura Detalhada dos Módulos](#-arquitetura-detalhada-dos-módulos)
 5. [Sistema de Voz Emocional — v1.1.6](#-sistema-de-voz-emocional--v116)
@@ -22,6 +22,7 @@ Com um **motor 2D ultraleve** com física softbody procedural, janela translúci
 10. [Suíte de Testes](#-suíte-de-testes-7-testes-100-aprovados)
 11. [Persistência Sináptica e Sono](#-persistência-sináptica-e-sono)
 12. [Estrutura do Projeto](#-estrutura-do-projeto)
+13. [Roadmap e Próximas Prioridades](#-roadmap-e-próximas-prioridades)
 
 ---
 
@@ -78,16 +79,24 @@ voice_synth_trigger(&voice, VOICE_CHIRP_CURIOUS, 0.18f);
 
 ---
 
-## 📋 Histórico de Versões
+## 📋 Histórico de Versões e Contagem de Neurônios
 
-| Versão | Tag | Destaque |
-|---|---|---|
-| **v1.1.6** | `v1.1.6` | 11 tipos de voz emocional procedural, `voice_synth_trigger_ex()`, mapeamento escalado por `state_timer` |
-| **v1.1.5** | `v1.1.5` | Vocalização vinculada a emoções (fim do grito contínuo), cooldowns por tipo, correção do falso alarme nociceptivo |
-| **v1.1.4** | `v1.1.4` | ALSA/WinMM non-blocking, scroll wheel, janela ativa, 3 novos sensores, 3 comportamentos autônomos |
-| **v1.1.3** | `v1.1.3` | Integração completa no loop principal, limpeza de arquivos ignorados |
-| **v1.1.3** | — | SNN Q8.8/CSR, neuromodulação, CPG, predição temporal, sensores SO, voz procedural, Global Workspace |
-| **v1.0.2** | — | Release inicial — SNN 1024, Softbody, backends X11/Win32 |
+| Versão | Tag | Neurônios Ativos | Topologia / Arquitetura Neural | Destaque Principal |
+|---|---|---|---|---|
+| **v1.1.6** | `v1.1.6` | **1024** (256 sensoriais + 768 inter/motores) | SNN Biofísica LIF + CSR esparso escalável a **2048+** neurônios | 11 tipos de voz emocional procedural, `voice_synth_trigger_ex()`, mapeamento escalado por `state_timer` |
+| **v1.1.5** | `v1.1.5` | **1024** (256 sensoriais + 768 inter/motores) | Desacoplamento motor de áudio + modulação emocional | Vocalização vinculada estritamente a emoções (fim do grito), cooldowns por tipo, fix reflexo nociceptivo |
+| **v1.1.4** | `v1.1.4` | **1024** (256 sensoriais + 768 inter/motores) | Injeção aferente de 6 sensores periféricos + DMN/Bond | ALSA/WinMM non-blocking, scroll wheel, janela ativa, 3 novos sensores, 3 comportamentos autônomos |
+| **v1.1.3** | `v1.1.3` | **1024** (loop) / **2048** (benchmark CSR) | Ponto fixo Q8.8, CSR, R-STDP trifatorial, atraso sináptico | Integração completa no loop principal, CPG marcapasso, Global Workspace e predição temporal |
+| **v1.0.2** | — | **1024** neurônios densos | Matriz sináptica clássica com plasticidade BCM | Release inicial — SNN 1024, Softbody elástico, backends X11/Win32 |
+
+### 🧠 Detalhamento da Topologia Neural Atual (v1.1.6)
+
+- **Loop Principal em Tempo Real (`PESTINHA_NEURONS = 1024`):**
+  - **256 Neurônios Sensoriais Aferentes:** Mapeiam cinemática do mouse, atrito de carinho, vento de scroll, calor de exploração, luminância da tela (luma), estresse de CPU (sysload) e geometria de janelas.
+  - **768 Neurônios Livres (Interneurônios e Motores):** Conectividade recorrente com homeostase BCM, fadiga sináptica e controle de tônus muscular (squish, stretch, jiggle, purr).
+- **Motor SNN de Próxima Geração CSR (`src/core/snn.c`):**
+  - Implementado em aritmética de ponto fixo Q8.8 (`fix16_t`) com representação esparsa CSR (Compressed Sparse Row).
+  - Validado e testado em benchmark (`test_snn.c`) com **2048 neurônios e 65.536 sinapses plásticas**, mantendo consumo inferior a **3 MB de RAM** e executando a mais de **2500 ticks/s** em apenas 1 core de CPU.
 
 ---
 
@@ -514,6 +523,30 @@ caddin/
     ├── test_sensors.c             # Testes de todos os sensores de desktop (mouse, janelas, scroll, luma, carga)
     └── test_snn.c                 # Validação da dinâmica SNN LIF, conectividade CSR e R-STDP
 ```
+
+---
+
+## 📋 Roadmap e Próximas Prioridades
+
+### ✅ Concluído até v1.1.6
+- **🟢 P1 — Correção de Bugs Críticos:** Áudio mudo no pipeline, centro de carinho do mouse, captura de scroll wheel e colisão de janela ativa resolvidos.
+- **🟢 P2 — Bioacústica e Voz Procedural Completa:** Sintetizador rico com 11 tipos emocionais, intensidade adaptativa e cooldowns estritos guiados por estados emocionais.
+- **🟢 P3 — Sensores e Comportamentos Autônomos:** Integração de `sysload`, `luma`, `heatmap`, `behavior_dmn` (Default Mode Network), `behavior_bond` (vínculo afetivo) e `behavior_explore`.
+
+### 🟡 Em Planejamento / Próximos Lotes
+- **🟡 P4 — Persistência v2 (`persist.c`):**
+  - Header binário com *magic bytes*, versão e soma de verificação CRC32.
+  - Escrita atômica via arquivo temporário + `rename()`.
+  - Fuzz test com bytes aleatórios para garantia de imunidade a falhas ou corrupção de save.
+- **🟡 P5 — Comportamentos Avançados (da lista das 30 ideias biológicas):**
+  - `behavior_hide_hunt.c`: Se esconder 80% atrás de bordas de janelas sob medo/estresse alto e caça de cursor.
+  - `behavior_perch.c`: Pouso com gravidade e repouso sobre a borda superior da janela ativa.
+  - Habituação por depleção sináptica de curto prazo (ideia #6).
+  - Resposta bifásica de susto seguido de alívio progressivo (ideia #4).
+- **🟡 P6 — Percepção e Linguagem Avançada:**
+  - Microfone em tempo real via captura ALSA `snd_pcm` (Linux) e waveIn (Windows) para reação a palmas e voz humana (somente com flag explícita de usuário).
+  - Leitura de texto da tela via API de acessibilidade (Linux AT-SPI e Windows UI Automation) para reação sem OCR.
+  - Quantização de fonemas online via k-means no léxico multimodal.
 
 ---
 
