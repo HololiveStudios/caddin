@@ -1,4 +1,3 @@
-````markdown
 <div align="center">
 
 # 🐾 Caddin
@@ -455,6 +454,3 @@ Projeto acadêmico / experimental, desenvolvido por **HololiveStudios**.
 <div align="center">
 
 *Caddin v1.2.0, compilado e testado em Linux (GCC, ALSA) e Windows (MinGW-w64, WinMM)*
-
-</div>
-````
