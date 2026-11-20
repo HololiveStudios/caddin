@@ -53,6 +53,7 @@ set(CORE_SRCS
     src/sense/sense_luma.c
     src/sense/sense_heatmap.c
     src/sense/sense_mic.c
+    src/sense/sense_music.c
     src/sense/sense_text.c
     src/body/palette.c
     src/body/voice_synth.c
@@ -65,6 +66,7 @@ set(CORE_SRCS
     src/behavior/behavior_hide_hunt.c
     src/behavior/behavior_perch.c
     src/behavior/behavior_startle_relief.c
+    src/behavior/behavior_dance.c
 )
 
 set(SRCS
@@ -144,6 +146,7 @@ add_executable(test_new_modules
     src/sense/sense_sysload.c
     src/sense/sense_heatmap.c
     src/sense/sense_mic.c
+    src/sense/sense_music.c
     src/sense/sense_text.c
     src/behavior/behavior_dmn.c
     src/behavior/behavior_bond.c
@@ -151,6 +154,8 @@ add_executable(test_new_modules
     src/behavior/behavior_hide_hunt.c
     src/behavior/behavior_perch.c
     src/behavior/behavior_startle_relief.c
+    src/behavior/behavior_dance.c
+    src/animation/softbody.c
     tests/test_new_modules.c
 )
 target_include_directories(test_new_modules PRIVATE

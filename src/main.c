@@ -42,7 +42,9 @@
 #include "behavior/behavior_hide_hunt.h"
 #include "behavior/behavior_perch.h"
 #include "behavior/behavior_startle_relief.h"
+#include "behavior/behavior_dance.h"
 #include "sense/sense_mic.h"
+#include "sense/sense_music.h"
 #include "sense/sense_text.h"
 
 #include <stdlib.h>
@@ -170,7 +172,9 @@ int main(void) {
     BehaviorPerch           perch;
     BehaviorStartleRelief   startle_relief;
     SenseMic                sense_mic;
+    SenseMusic              sense_music;
     SenseText               sense_text;
+    BehaviorDance           dance;
 
     sense_mouse_init(&sense_mouse);
     sense_scroll_init(&sense_scroll);
@@ -188,7 +192,9 @@ int main(void) {
     behavior_hide_hunt_init(&hide_hunt);
     behavior_perch_init(&perch);
     behavior_startle_relief_init(&startle_relief);
+    behavior_dance_init(&dance);
     sense_mic_init(&sense_mic, 16000);
+    sense_music_init(&sense_music, 16000);
     sense_text_init(&sense_text);
 
     /* ── Luma precisa de Display*, criado dinamicamente ── */
