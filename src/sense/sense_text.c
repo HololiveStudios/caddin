@@ -77,6 +77,33 @@ void sense_text_update(SenseText *st, float dt, void *native_display, unsigned l
             strncpy(st->last_word, candidate, sizeof(st->last_word) - 1);
             st->has_new_word = true;
         }
+
+        /* Varredura por padrões de erro ou sucesso no título da janela */
+        char lower_title[SENSE_TEXT_MAX_LEN] = {0};
+        for (size_t i = 0; new_title[i] && i < sizeof(lower_title) - 1; ++i) {
+            lower_title[i] = (char)tolower((unsigned char)new_title[i]);
+        }
+
+        static const char *const ERROR_PATTERNS[] = {
+            "error", "erro", "failed", "failure", "segfault", "panic",
+            "exception", "syntaxerror", "undefined reference", "fatal", "abort"
+        };
+        for (size_t i = 0; i < sizeof(ERROR_PATTERNS)/sizeof(ERROR_PATTERNS[0]); ++i) {
+            if (strstr(lower_title, ERROR_PATTERNS[i])) {
+                st->has_error = true;
+                break;
+            }
+        }
+
+        static const char *const SUCCESS_PATTERNS[] = {
+            "success", "sucesso", "passed", "succeeded", "build finished", "completed"
+        };
+        for (size_t i = 0; i < sizeof(SUCCESS_PATTERNS)/sizeof(SUCCESS_PATTERNS[0]); ++i) {
+            if (strstr(lower_title, SUCCESS_PATTERNS[i])) {
+                st->has_success = true;
+                break;
+            }
+        }
     }
 }
 
@@ -84,8 +111,24 @@ const char *sense_text_get_last_word(const SenseText *st) {
     return st ? st->last_word : "";
 }
 
+const char *sense_text_get_title(const SenseText *st) {
+    return st ? st->current_title : "";
+}
+
 bool sense_text_has_new_word(SenseText *st) {
     if (!st || !st->has_new_word) return false;
     st->has_new_word = false;
+    return true;
+}
+
+bool sense_text_has_error(SenseText *st) {
+    if (!st || !st->has_error) return false;
+    st->has_error = false;
+    return true;
+}
+
+bool sense_text_has_success(SenseText *st) {
+    if (!st || !st->has_success) return false;
+    st->has_success = false;
     return true;
 }

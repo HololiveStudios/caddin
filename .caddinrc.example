@@ -1,0 +1,41 @@
+# .caddinrc — Arquivo de Configuração e Regras do Caddin
+#
+# Seções disponíveis:
+#   [privacy]           Lista de termos/aplicativos para ignorar leitura de texto
+#   [rule:NOME]         Regras acionadas por contexto da janela, horário e ação
+
+[privacy]
+keepass
+bitwarden
+1password
+private window
+incognito
+bank
+finance
+
+# -------------------------------------------------------------
+# Regras de Comportamento
+# -------------------------------------------------------------
+
+# Quando estiver compilando código no GCC/Clang, Caddin fica curioso e atento
+[rule:dev_compiler]
+window = gcc
+action = react_curious
+param = 0.8
+cooldown = 15.0
+
+# Se estiver assistindo vídeos ou no navegador à noite, estimula relaxamento
+[rule:late_night_browse]
+window = youtube
+hour_min = 23
+hour_max = 6
+action = inject_ser
+param = 0.1
+cooldown = 60.0
+
+# Foco de trabalho intenso no editor
+[rule:editor_flow]
+window = code
+action = inject_da
+param = 0.05
+cooldown = 45.0

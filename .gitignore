@@ -4,6 +4,12 @@ dist/
 bin/
 *.o
 *.brain
+*.onto
+*.sdm
+*.bandit
+*.keys
+*.log
+*.tmp
 .DS_Store
 ignore/
 tests/test_*

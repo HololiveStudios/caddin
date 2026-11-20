@@ -383,6 +383,12 @@ void brain_reset_habituation(Brain *b) {
     }
 }
 
+double brain_pool_rate(const Brain *b, int i) {
+    return (b && i >= 0 && i < NPOOLS) ? b->pool_rates[i] : 0.0;
+}
+
+int brain_pool_count(void) { return NPOOLS; }
+
 void brain_save(const Brain *b, const char *path) {
     if (!b || !path) return;
     /* Persistência v2 com cabeçalho atômico e integridade CRC32 */

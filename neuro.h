@@ -24,4 +24,8 @@ const char *brain_channel_name(int index);
 const char *brain_motor_name(int index);
 const char *brain_interneuron_name(int index);
 
+/* Ontogeny: acesso direto às taxas de disparo por pool e à variação plástica */
+double brain_pool_rate(const Brain *brain, int pool_index);
+int    brain_pool_count(void);  /* retorna NPOOLS */
+
 #endif /* PESTINHA_NEURO_H */

@@ -42,6 +42,38 @@ void softbody_purr(SoftBody *sb, float duration) {
     sb->purr_timer = duration;
 }
 
+void softbody_set_maturity_stage(SoftBody *sb, int stage) {
+    if (!sb) return;
+    switch (stage) {
+    case 0: /* ONTO_FILHOTE: gelatina macia, altamente responsiva */
+        sb->stiffness   = 130.0f;
+        sb->damping     = 8.0f;
+        sb->mass        = 0.8f;
+        sb->restitution = 0.85f;
+        break;
+    case 1: /* ONTO_JUVENIL */
+        sb->stiffness   = 160.0f;
+        sb->damping     = 10.5f;
+        sb->mass        = 1.0f;
+        sb->restitution = 0.75f;
+        break;
+    case 2: /* ONTO_ADULTO: mais firme e estruturado */
+        sb->stiffness   = 200.0f;
+        sb->damping     = 13.0f;
+        sb->mass        = 1.2f;
+        sb->restitution = 0.65f;
+        break;
+    case 3: /* ONTO_VETERANO: corpo estável, oscilações curtas */
+        sb->stiffness   = 240.0f;
+        sb->damping     = 16.0f;
+        sb->mass        = 1.4f;
+        sb->restitution = 0.55f;
+        break;
+    default:
+        break;
+    }
+}
+
 void softbody_update(SoftBody *sb, double dt, float target_sx, float target_shear) {
     if (dt <= 0.0001) return;
     if (dt > 0.05) dt = 0.05;

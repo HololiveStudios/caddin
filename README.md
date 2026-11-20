@@ -1,430 +1,408 @@
 <div align="center">
 
-# 🐾 Caddin
+# 🐾 Caddin — Organismo Virtual Sintético v1.4.0
+### Mascote Autônomo para Desktop com SNN de 2048 Neurônios, Ontogenia Biológica, Memória Hiperdimensional SDM, Bandit Dopaminérgico UCB1, Percepção Multimodal e Telemetria em C11 Puro
 
-### Mascote virtual autônomo para desktop, movido por uma rede neural pulsada (SNN) de 2048 neurônios
-
-![Versão](https://img.shields.io/badge/versão-1.2.0-blue)
-![Linguagem](https://img.shields.io/badge/linguagem-C-informational)
-![Plataformas](https://img.shields.io/badge/plataformas-Linux%20%7C%20Windows-success)
-![RAM](https://img.shields.io/badge/RAM-~12%20MB-brightgreen)
-![Testes](https://img.shields.io/badge/testes-7%2F7%20aprovados-brightgreen)
-![Dependências](https://img.shields.io/badge/OpenGL%2FMesa%2FLLVM-nenhum-lightgrey)
+[![Linguagem](https://img.shields.io/badge/Linguagem-C11%20Puro%20(Zero%20Python)-blue.svg)](#)
+[![RAM](https://img.shields.io/badge/Consumo%20RAM-~12%20MB-brightgreen.svg)](#)
+[![Alocação](https://img.shields.io/badge/Alocação-Zero%20Malloc%20no%20Loop-orange.svg)](#)
+[![Aritmética](https://img.shields.io/badge/Aritmética-Ponto%20Fixo%20Q8.8%20%2F%20Q0.32-purple.svg)](#)
+[![Testes](https://img.shields.io/badge/Testes-13%2F13%20Aprovados%20(100%25)-success.svg)](#)
+[![Plataformas](https://img.shields.io/badge/Plataformas-Linux%20(X11%20%2B%20ALSA)%20%7C%20Windows%20(GDI%20%2B%20WinMM)-blueviolet.svg)](#)
+[![Licença](https://img.shields.io/badge/Licença-MIT%20Open%20Experimental-lightgrey.svg)](#)
 
 </div>
 
-O **Caddin** é um companheiro virtual vivo que opera como uma **simulação neurobiológica em tempo real**. Ele ouve pelo microfone, lê o contexto da tela, reage ao mouse e às janelas, vocaliza emoções com síntese procedural e lembra de você entre sessões.
+---
 
-- 🧠 **Cérebro SNN** com 2048 neurônios biofísicos (LIF, R-STDP, 5 neuromoduladores)
-- 🎙️ **Percepção multimodal:** mouse, scroll, janelas, luminância, carga de CPU, microfone e texto da tela
-- 🫧 **Física softbody** elástica com renderizador 2D por CPU
-- 🔊 **11 vozes emocionais** sintetizadas em tempo real, sem `malloc` no loop principal
-- 💾 **Persistência atômica v2** com integridade CRC32
-- 🪶 **Ultraleve:** ~12 MB de RAM, 100% nativo (X11 + ALSA / Win32 GDI + WinMM)
+## 📖 Apresentação
+
+O **Caddin** é um companheiro virtual vivo para desktop projetado como uma **simulação neurobiológica contínua e autônoma** em tempo real a 60 FPS. Diferente de mascotes convencionais que executam scripts de animação pré-renderizados ou agentes LLM em nuvem, o Caddin é um **organismo sintético guiado por disparos de potenciais de ação (spikes)** em uma rede neural de 2048 neurônios biológicos acoplada à dinâmica de 5 neuromoduladores endógenos, física elástica de corpo mole deformável (softbody), audição procedural, visão contextual do fluxo de trabalho do usuário e ontogenia com maturação corporal e vocal.
+
+Desenvolvido estritamente em **C11 nativo sem alocação dinâmica no laço principal** e com aritmética de ponto fixo determinística (`fix16_t` Q8.8 e `brake` Q0.32), o programa consome apenas **~12 MB de memória RAM**, rodando com fluidez sem necessidade de GPU dedicada, OpenGL, Mesa, LLVM ou bibliotecas pesadas.
 
 ---
 
-## 📑 Sumário
+## 📑 Índice Geral
 
-1. [Início rápido](#-início-rápido)
-2. [Novidades da v1.2.0](#-novidades-da-v120)
-3. [Controles e interações](#-controles-e-interações)
-4. [Arquitetura](#-arquitetura)
-5. [Cérebro SNN](#-cérebro-snn)
-6. [Sistema de voz emocional](#-sistema-de-voz-emocional)
-7. [Sensores e percepção](#-sensores-e-percepção)
-8. [Comportamentos autônomos](#-comportamentos-autônomos)
-9. [Persistência e sono](#-persistência-e-sono)
-10. [Testes](#-testes)
-11. [Estrutura do projeto](#-estrutura-do-projeto)
-12. [Histórico de versões](#-histórico-de-versões)
-13. [Roadmap](#-roadmap)
-14. [Licença](#-licença)
+1. [Início Rápido e Execução](#-início-rápido-e-execução)
+2. [Matriz Completa de Capacidades do Organismo](#-matriz-completa-de-capacidades-do-organismo)
+3. [Arquitetura Neurobiológica em 4 Camadas](#-arquitetura-neurobiológica-em-4-camadas)
+4. [Cérebro SNN de 2048 Neurônios e Topologia Neural](#-cérebro-snn-de-2048-neurônios-e-topologia-neural)
+5. [Ciclo Ontogenético e Janela Crítica de Aprendizado](#-ciclo-ontogenético-e-janela-crítica-de-aprendizado)
+6. [Memória Episódica SDM (Kanerva) & Curiosidade (Schmidhuber)](#-memória-episódica-sdm-kanerva--curiosidade-schmidhuber)
+7. [Bandit Dopaminérgico UCB1 & Detecção de Fadiga Humana](#-bandit-dopaminérgico-ucb1--detecção-de-fadiga-humana)
+8. [Maturação Vocal & Síntese Procedural Acústica (11 Tipos)](#-maturação-vocal--síntese-procedural-acústica)
+9. [Física Elástica Softbody e Reações Mecânicas](#-física-elástica-softbody-e-reações-mecânicas)
+10. [Percepção Contextual de Janelas, Código e Privacidade](#-percepção-contextual-de-janelas-código-e-privacidade)
+11. [Rituais Circadianos e Marcos de Convivência](#-rituais-circadianos-e-marcos-de-convivência)
+12. [Biometria de Digitação (IKD) & Resumo Diário de Foco](#-biometria-de-digitação-ikd--resumo-diário-de-foco)
+13. [Monitor de Telemetria e Spikes em Terminal ANSI em 100% C](#-monitor-de-telemetria-e-spikes-em-terminal-ansi)
+14. [Motor de Regras Customizáveis (.caddinrc)](#-motor-de-regras-customizáveis-caddinrc)
+15. [Persistência Atômica v2 com Integridade CRC32](#-persistência-atômica-v2-com-integridade-crc32)
+16. [Estrutura de Diretórios do Projeto](#-estrutura-de-diretórios-do-projeto)
+17. [Histórico de Versões e Evolução](#-histórico-de-versões-e-evolução)
+18. [Guia de Compilação, Cross-Compile e Deploy](#-guia-de-compilação-cross-compile-e-deploy)
+19. [Suíte de Testes Automatizada (13/13 Aprovadas)](#-suíte-de-testes-automatizada)
+20. [Controles, Interações e Atalhos](#-controles-interações-e-atalhos)
+21. [Licença](#-licença)
 
 ---
 
-## 🚀 Início rápido
+## 🚀 Início Rápido e Execução
 
-### Linux (X11 + ALSA)
-
+### Linux (Nativo X11 + ALSA)
 ```bash
+# 1. Instalar dependências básicas de compilação
 sudo apt install gcc make cmake libx11-dev libxext-dev libasound2-dev
 
+# 2. Clonar o repositório
 git clone https://github.com/HololiveStudios/caddin.git
 cd caddin
-make          # compila
-make run      # executa
+
+# 3. Compilar em modo Release
+make
+
+# 4. Executar a suíte completa de testes unitários (13/13)
+make test
+
+# 5. Iniciar o mascote
+make run
 ```
 
-### Windows (cross-compile via MinGW-w64, a partir do Linux)
+### Monitor de Telemetria em Tempo Real (Terminal Separado, 100% C Puro)
+```bash
+# Permite assistir a atividade dos 2048 neurônios, ondas de neuromoduladores e fadiga
+./build/caddin_monitor
+```
 
+### Windows (Compilação Cruzada via MinGW-w64 no Linux)
 ```bash
 sudo apt install gcc-mingw-w64-x86-64 ninja-build cmake
 make windows
-# Saída: build-windows/caddin.exe  e  bin/caddin.exe
+# Binários gerados: build-windows/caddin.exe e build-windows/caddin_monitor.exe
 ```
-
-O executável é estático e independente, sem necessidade de instalar runtime.
-
-> Instruções detalhadas em [`BUILD.md`](BUILD.md).
 
 ---
 
-## 🌟 Novidades da v1.2.0
+## 🧬 Matriz Completa de Capacidades do Organismo
 
-### 🧠 Expansão neural para 2048 neurônios
-O cérebro em tempo real passou de 1024 para **2048 neurônios** no laço de 60 FPS.
-
-| Camada | Neurônios | Organização | Função |
-|---|---|---|---|
-| Sensoriais aferentes | **512** | 64 pools × 8 | Mouse, scroll, janelas, CPU, calor, luminância, microfone e texto da tela |
-| Interneurônios associativos | **1152** | 32 pools × 36 | Plasticidade R-STDP, homeostase BCM, aprendizado emocional e habituação |
-| Motores | **384** | 24 pools × 16 | Tônus muscular do softbody, postura e locomoção |
-
-### 🛡️ Persistência v2 (`src/core/persist.c`)
-- Cabeçalho binário estrito: magic `0x43414444` ("CADD"), versão 2, contagem de neurônios e **CRC32 (IEEE 802.3)**
-- Escrita atômica: grava em `.tmp` e substitui via `rename()` / `MoveFileEx`
-- Fuzz testado com 100 mutações aleatórias, com rejeição suave e sem travamentos
-
-### 🎭 Novos comportamentos (lote P5)
-
-| Arquivo | Comportamento |
-|---|---|
-| `behavior_hide_hunt.c` | Sob estresse alto, esconde 80% do corpo além da borda da janela mais próxima. Em bom humor, se aproxima do cursor e dá um bote lúdico |
-| `behavior_perch.c` | Pousa no topo da janela ativa com gravidade natural e acompanha a janela se ela for arrastada |
-| `behavior_startle_relief.c` | Resposta bifásica: susto (squish espasmódico), seguido de alívio com serotonina e suspiro (`VOICE_GRUNT_IDLE`) |
-
-### 🎙️ Nova percepção (lote P6)
-
-| Arquivo | Percepção |
-|---|---|
-| `sense_mic.c` | Microfone ambiente não-bloqueante (ALSA / waveIn), com RMS em tempo real para detectar palmas, gritos e voz |
-| `sense_text.c` | Palavras e tópicos da janela em foco (`_NET_WM_NAME` no X11, `GetWindowText` no Windows) alimentando o `lexicon` |
-
----
-
-## 🎮 Controles e interações
-
-| Ação do usuário | Resposta do Caddin |
-|---|---|
-| Passar o cursor suavemente sobre ele | Atrito (rubbing), DA/5-HT ↑, `PURR_CONTENT` → `PURR_DEEP` |
-| Sacudir rapidamente | Reflexo nociceptivo, `SQUEAK_STARTLED`, NE/cortisol ↑, squish |
-| Sacudir continuamente | `EMO_ANNOYED` → `GROWL_ANNOYED` → `HISS_ANGRY` (escalonado) |
-| Rolar a roda do mouse | Vento de rolagem, recuo do corpo, olhos fechados |
-| Arrastar e arremessar | Física balística, gravidade e amortecimento elástico no solo |
-| Aproximar do botão fechar | Quina de perigo: aversão ativa e esquiva |
-| Trocar de janela (Alt+Tab) | Sobressalto atencional, `EMO_SURPRISED`, `SQUEAK_STARTLED` |
-| Ignorá-lo por muito tempo | Saudade (bond longing): `WHINE_PROTEST` a cada ~30 s |
-| Inatividade prolongada | CPG desacelera, pupilas dilatam, DMN ativa (bocejo, grooming, trilo) |
-| CPU sobrecarregada | Cortisol ↑, limiar de estresse menor, agitação |
-
----
-
-## 🗺️ Arquitetura
-
-### Visão geral
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                  CADDIN — LOOP PRINCIPAL                 │
-│    60 fps  •  dt fixo  •  zero alocação dinâmica        │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-    SENSORES          NÚCLEO NEURAL        EXPRESSÃO
-  src/sense/            src/core/           src/body/
-  src/behavior/                             src/animation/
-        │                  │                  │
-  sense_mouse         snn.c (LIF          voice_synth.c
-  sense_scroll        Q8.8 / CSR)         audio_out.c
-  sense_heatmap       neuromod.c          palette.c
-  sense_luma          cpg.c               softbody.c
-  sense_sysload       predict.c           animation.c
-  sense_windows       emotions.c
-  sense_mic           workspace.c
-  sense_text          lexicon.c
-```
-
-### Fluxo de consciência e vocalização
-
-```
-Estímulo (mouse, scroll, sacudida, luma, sysload, mic, texto)
-        │
-        ▼
-  sense_* → SNN → neuromod → EmotionMachine (state_timer)
-        │
-        ├── EMO_AFFECTION ──► PURR_CONTENT / PURR_DEEP / TRILL
-        ├── EMO_CURIOUS   ──► CHIRP_CURIOUS
-        ├── EMO_SURPRISED ──► SQUEAK_STARTLED
-        ├── EMO_ANNOYED   ──► GROWL_ANNOYED → HISS_ANGRY
-        ├── EMO_DIZZY     ──► WHINE_PROTEST
-        ├── DMN_YAWN      ──► GRUNT_IDLE
-        └── Bond longing  ──► WHINE_PROTEST
-        │
-        ▼
-  voice_synth_render() → audio_out_write() → ALSA / WinMM
-```
-
-### Módulos por diretório
-
-#### `src/core/` — Núcleo matemático e neural
-
-| Arquivo | Responsabilidade |
-|---|---|
-| `fixed.h` | Aritmética de ponto fixo Q8.8 (`fix16_t`), sem `float` no hot path |
-| `snn.c/.h` | SNN LIF com CSR esparso, anel de atraso sináptico de 8 slots, R-STDP trifatorial e STP Tsodyks-Markram |
-| `neuromod.c/.h` | 5 neuromoduladores (DA, NE, 5-HT, ACh, cortisol) com homeostase contínua |
-| `cpg.c/.h` | CPG de respiração, batimento cardíaco e febre cognitiva |
-| `predict.c/.h` | Codificação preditiva temporal e mismatch spikes |
-| `persist.c/.h` | Persistência atômica v2 com CRC32 |
-| `arena.c/.h` | Alocador de arena estático (zero `malloc` em runtime) |
-| `rng.c/.h` | PRNG determinístico leve |
-
-#### `src/sense/` — Sensores
-
-| Arquivo | O que detecta |
-|---|---|
-| `sense_mouse` | Velocidade, aceleração, sacudida (`shake_reversals ≥ 3`), atrito e vetor relativo ao pet |
-| `sense_scroll` | Vento de rolagem com decaimento exponencial |
-| `sense_windows` | Topologia de janelas, galhos de pouso, quina de perigo, Alt+Tab e retângulo da janela ativa |
-| `sense_heatmap` | Mapa térmico de visitas do cursor |
-| `sense_luma` | Luminância média da janela ativa (XGetImage / GDI) |
-| `sense_sysload` | Carga de CPU (`/proc/stat` no Linux, `GetSystemTimes` no Windows) |
-| `sense_mic` | Áudio ambiente: RMS, palmas, voz |
-| `sense_text` | Palavras e títulos da janela em foco |
-
-#### `src/behavior/` — Comportamentos
-
-| Arquivo | Comportamento |
-|---|---|
-| `behavior_dmn` | Default Mode Network (bocejo, grooming, micro-chirp, olhar ao redor) |
-| `behavior_bond` | Vínculo de longo prazo e detecção de saudade |
-| `behavior_explore` | Exploração territorial via heatmap |
-| `behavior_hide_hunt` | Esconder-se sob estresse e caça lúdica do cursor |
-| `behavior_perch` | Pouso sobre a janela ativa |
-| `behavior_startle_relief` | Resposta bifásica susto → alívio |
-
-#### `src/body/`, `src/animation/`, `src/mind/`, `src/lang/`
-
-| Arquivo | Responsabilidade |
-|---|---|
-| `voice_synth` | 11 vozes emocionais (sine, AM, FM, vibrato, tremolo, ruído xorshift32, harmônicos, sweep, ADSR) |
-| `audio_out` | Saída não-bloqueante (ALSA / WinMM), ring buffer de 8192 amostras e thread dedicada |
-| `palette` | Vetor neuroquímico → aura cromática RGB e dilatação pupilar |
-| `softbody` | Massa-mola: `squish`, `stretch`, `jiggle`, `purr` |
-| `animation` | Interpolação de poses e sincronia com o CPG |
-| `autonomy` | Locomoção guiada pelo output motor da SNN |
-| `emotions` | Máquina de estados emocionais com `state_timer` |
-| `workspace` | Global Workspace Theory: competição WTA, habituação e broadcast atencional |
-| `lexicon` | Léxico multimodal emergente (palavra ↔ emoção), consolidação no sono e pruning |
-
-#### `src/platform/` e `src/renderer/`
-
-- **Linux:** X11 com XShm (memória compartilhada), cursor X11 e janelas ARGB compostas
-- **Windows:** Win32 GDI com `UpdateLayeredWindow` e `BitBlt` em DC offscreen
-- **Renderer:** rasterizador por software (CPU), sem OpenGL
-
----
-
-## 🧠 Cérebro SNN
-
-- **Motor:** `src/core/snn.c`, em ponto fixo Q8.8 (`fix16_t`), representação esparsa **CSR** e atraso axônico
-- **Plasticidade:** R-STDP trifatorial, homeostase BCM, STP Tsodyks-Markram e habituação pré-sináptica
-- **Desempenho:** menos de **3 MB de RAM** e mais de **2500 ticks/s** em um único core
-- **Neuromodulação:** dopamina, noradrenalina, serotonina, acetilcolina e cortisol
-
----
-
-## 🎙️ Sistema de voz emocional
-
-Onze vozes procedurais inspiradas em vocalizações felinas e de mamíferos. Toda a síntese acontece in-place na struct `VoiceSynth`, **sem `malloc`** no loop principal.
-
-| Tipo | Emoção | Técnica de síntese |
+| Dimensão | Componente Interno | Funcionamento e Especificação Técnica |
 |---|---|---|
-| `VOICE_PURR_CONTENT` | Carinho moderado | Carrier 68 Hz + AM triangular 20 Hz + harmônico de oitava + ruído 4% |
-| `VOICE_PURR_DEEP` | Êxtase prolongado | 55 Hz + 3 harmônicos + AM profunda 24 Hz + vibrato de êxtase |
-| `VOICE_TRILL` | Alegria / brincadeira | 3 chirps 450→780 Hz (65 ms cada) com gap de 40 ms |
-| `VOICE_CHIRP_HAPPY` | Toque gostoso | 2 notas (500 / 660 Hz) com pausa entre elas |
-| `VOICE_CHIRP_CURIOUS` | Curiosidade | Sweep 380→760 Hz, com vibrato nos últimos 35% |
-| `VOICE_GRUNT_IDLE` | Bocejo / despertar | Descida 320→160 Hz, envelope de bocejo e ruído de rouquidão |
-| `VOICE_WHINE_PROTEST` | Saudade / reclamação | Descida com vibrato crescente e tremolo pulsante |
-| `VOICE_GROWL_ANNOYED` | Raiva baixa | 160 Hz + 4 harmônicos (inarmônico, textura gutural) + tremolo |
-| `VOICE_HISS_ANGRY` | Raiva intensa | Ruído branco (xorshift32) com decay quadrático, sem componente tonal |
-| `VOICE_SQUEAK_STARTLED` | Susto agudo | 1300→550 Hz, ataque zero e decay instantâneo |
-| `VOICE_CRY_DISTRESS` | Angústia | Vibrato ±40 Hz a 7.5 Hz + tremolo + soluço a 3.5 Hz |
+| **Cérebro Spiking** | 2048 Neurônios LIF | 64 canais sensoriais (512 neurônios), 32 pools associativos (1152 neurônios) e 24 motores (384 neurônios). Sinapses CSR esparsas com R-STDP e STP de Tsodyks-Markram. |
+| **Ontogenia Biológica** | 120 Pools Ontogenéticos | Maturação em 4 estágios (*Filhote, Juvenil, Adulto, Veterano*). Freio da janela crítica com aritmética Q0.32 e cristalização de projeções estáveis para `int8`. |
+| **Memória Episódica** | SDM Hiperdimensional | Sparse Distributed Memory de Kanerva com hipervetores de 2048 bits ($32 \times \text{uint64\_t}$). Conclusão de padrão resistente a ruído e poda sináptica no sono. |
+| **Curiosidade Intrínseca** | Princípio de Schmidhuber | Injeção de dopamina por progresso de compressão temporal ($\Delta \text{err} < -2$). Elevação do drive de exploração quando o ambiente está estagnado. |
+| **Inteligência Contextual** | Bandit UCB1 | Exploração vs. exploração de intervenções ergonômicas baseadas no perfil de fadiga e aceitação implícita do usuário. |
+| **Visão & Desktop** | Percepção de Texto X11/Win32 | Monitoramento em tempo real do contexto de tela com detecção nativa de erros (`segfault`, `panic`) e sucessos de compilação (`passed`, `build completed`). |
+| **Audição Acústica** | Captura de Microfone ALSA | Processamento RMS não-bloqueante; reage a sons súbitos, palmas e intensidade da fala humana. |
+| **Biometria de Teclado** | Keystroke Biometrics IKD | Reconhece o dono pela cadência de digitação (Inter-Keystroke Delay em 16 bins), elevando serotonina com o dono e noradrenalina com estranhos. |
+| **Física Softbody** | Dinâmica Elástica 2D | Equação massa-mola amortecida contínua com deformações de *Squish*, *Stretch*, *Shear* e expansão respiratória acoplada ao CPG. |
+| **Voz Sintética** | Modelagem Acústica 16 kHz | 11 tipos de vocalizações sintetizadas proceduralmente (sem áudios gravados). Frequências fundamentais, harmônicos, vibrato, tremolo e ruído. |
+| **Telemetria ANSI** | FIFO POSIX Não-Bloqueante | Emite telemetria binária a 10 Hz para visualização em terminal C puro (`caddin_monitor`). |
+| **Resumo Diário** | Daily Summary Logger | Mantém métricas diárias agregadas de convivência, código e foco em `caddin_daily.log`. |
+| **Privacidade Estrita** | Blacklist de Segurança | Ignora qualquer leitura de janela pertencente a gerenciadores de senhas (`bitwarden`, `keepass`, `1password`), bancos e sessões privadas. |
+| **Personalização** | Parser `.caddinrc` | Configuração de regras ativas por nome de janela, horários de foco, injeção direta de neuromoduladores e ações físicas. |
 
-### Mapeamento emocional escalonado
+---
 
-A intensidade da voz é modulada pelo **tempo na emoção** (`state_timer`):
+## 🏛️ Arquitetura Neurobiológica em 4 Camadas
 
-```
-EMO_AFFECTION
-  < 1s   → VOICE_CHIRP_HAPPY    (surpresa gostosa de ser tocado)
-  1–4s   → VOICE_PURR_CONTENT   (carinho moderado, intensidade ∝ state_timer)
-  > 4s   → VOICE_PURR_DEEP      (êxtase) + VOICE_TRILL esporádico
+```mermaid
+flowchart TD
+    subgraph C1["CAMADA 1: Percepção Multimodal do Sistema Operacional"]
+        M1["Mouse: Posição, Atrito, Sacudida, Jitter"]
+        M2["Teclado: Cadência, Pausas, Biometria IKD"]
+        M3["Tela: Títulos Ativos, Erros e Sucessos de Build"]
+        M4["Áudio: Microfone Ambiente RMS"]
+        M5["Hardware: Carga de CPU, Memória, Temperatura"]
+    end
 
-EMO_CURIOUS     → VOICE_CHIRP_CURIOUS
-EMO_SURPRISED   → VOICE_SQUEAK_STARTLED
-EMO_ANNOYED
-  < 2s   → VOICE_GROWL_ANNOYED
-  > 2s   → VOICE_HISS_ANGRY
-EMO_DIZZY       → VOICE_WHINE_PROTEST
-DMN_YAWN        → VOICE_GRUNT_IDLE
-DMN_MICRO_CHIRP → VOICE_TRILL
-Bond longing    → VOICE_WHINE_PROTEST
-```
+    subgraph C2["CAMADA 2: Cérebro SNN (2048 Neurônios) & CPG"]
+        S1["512 Sensoriais (64 Pools de Entrada)"]
+        S2["1152 Associativos Límbicos e Cognitivos"]
+        S3["384 Motores (Vocalizações, Expressões, Movimento)"]
+        CPG["Central Pattern Generator (Respiração & Ritmo)"]
+    end
 
-### API
+    subgraph C3["CAMADA 3: Neuromodulação, Memória & Ontogenia"]
+        N1["Neuromoduladores: DA, NE, SER, ACh, CORT"]
+        N2["Ontogenia: Janela Crítica & Freio Inibitório Q0.32"]
+        N3["Memória Episódica SDM (Hipervetores 2048 bits)"]
+        N4["Bandit Dopaminérgico UCB1 (Intervenções Inteligentes)"]
+        N5["Ring Buffer de Causalidade (256 Eventos Recentes)"]
+    end
 
-```c
-/* Trigger rico: intensity [0.0..1.0] modula volume, vibrato e profundidade */
-voice_synth_trigger_ex(&voice, VOICE_PURR_DEEP, 0.50f, 0.9f);
+    subgraph C4["CAMADA 4: Atuação Física, Vocal & Comportamental"]
+        A1["Softbody Físico 2D (Squish, Stretch, Jiggle)"]
+        A2["Síntese de Voz Procedural 16 kHz (11 Tipos)"]
+        A3["Árvore de Comportamentos: Perch, Hide, Hunt, Dance"]
+        A4["Renderizador Pixel-Art com Olhos Expressivos"]
+        A5["FIFO de Telemetria e Logger Diário"]
+    end
 
-/* Trigger simples (compatibilidade retroativa) */
-voice_synth_trigger(&voice, VOICE_CHIRP_CURIOUS, 0.18f);
-```
-
-### Struct `VoiceSynth`
-
-```c
-typedef struct {
-    VoiceType current_type;
-    uint32_t  sample_rate, sample_index, total_samples;
-    float     f0, f1, f2;          /* osciladores principal / alvo / formante */
-    float     phase, mod_phase, phase2;
-    float     vibrato_phase, vibrato_rate, vibrato_depth;
-    float     tremolo_phase, tremolo_rate;
-    uint32_t  noise_seed;           /* xorshift32 para textura orgânica */
-    uint8_t   repeat_count, repeat_max;
-    uint32_t  repeat_len, gap_len;  /* trilos e chirps múltiplos */
-    float     intensity;            /* 0..1: modula volume e expressividade */
-    float     breath_phase;
-} VoiceSynth;
+    C1 --> C2
+    C2 <--> C3
+    C2 --> C4
+    C3 --> C4
 ```
 
-### Cooldowns por tipo
+---
 
-| Cooldown | Valor | Propósito |
+## 🧠 Cérebro SNN de 2048 Neurônios e Topologia Neural
+
+A rede opera a 60 quadros por segundo com neurônios **LIF (Leaky Integrate-and-Fire)** e sinapses esparsas em formato **CSR (Compressed Sparse Row)**:
+
+### 1. Canais Sensoriais de Entrada (64 Pools × 8 Neurônios = 512)
+- **Digitação & Ritmo:** `TYPING`, `KEY_FAST`, `KEY_SLOW`, `IDLE`, `PAUSE`, `CMD_ENTER`, `BACKSPACE`, `DELETE`.
+- **Mouse & Físico:** `MOUSE_MOVE`, `MOUSE_FAST`, `MOUSE_SHAKE`, `MOUSE_DRAG`, `CLICK_LEFT`, `CLICK_RIGHT`, `WHEEL_UP`, `WHEEL_DOWN`.
+- **Janelas & Desktop:** `WIN_ACTIVE`, `WIN_SWITCH`, `WIN_MINIMIZE`, `WIN_MAXIMIZE`, `WIN_MOVE`, `WIN_RESIZE`, `WIN_CLOSE_DANGER`.
+- **Hardware & Sistema:** `CPU_HIGH`, `CPU_NORMAL`, `CPU_IDLE`, `TEMP_HOT`, `TEMP_WARM`, `RAM_HEAVY`, `IO_WAIT`.
+- **Ambiente Físico:** `LUMA_DARK`, `LUMA_BRIGHT`, `HEATMAP_DENSE`, `SOUND_LOUD`, `SOUND_QUIET`, `TEXT_NEW_WORD`.
+
+### 2. Interneurônios Associativos (32 Pools × 36 Neurônios = 1152)
+Pools de associação límbica, memória de trabalho e plasticidade:
+- `EMOTION_REG`, `ALERT`, `PLAYFUL`, `RESTING`, `SURPRISED`, `HYPERACTIVE`, `FEAR_RESPONSE`, `REWARD_EXPECT`, `THREAT_DETECT`, `RHYTHM_GEN`, `FOCUS_POOL`, `COGNITIVE_HIGH`, `COGNITIVE_LOW`, `COMFORT_POOL`, `ENERGY_CONSERVE`, `HABITUATION_POOL`.
+
+### 3. Motores Comportamentais (24 Pools × 16 Neurônios = 384)
+- **Expressão Facial:** `M_FACE_HAPPY`, `M_FACE_SAD`, `M_FACE_SLEEP`, `M_FACE_SURPRISED`, `M_FACE_ANGRY`, `M_FACE_CURIOUS`, `M_FACE_PLAYFUL`, `M_FACE_NEUTRAL`, `M_FACE_WINK`.
+- **Atuação Vocal:** `M_CHIRP_SOUND`, `M_BEEP_PULSE`, `M_PURR_EFFECT`, `M_ALERT_EMIT`, `M_THINK_EMIT`.
+- **Locomoção & Dinâmica:** `M_WANDER_LEFT`, `M_WANDER_RIGHT`, `M_JUMP_ACTION`, `M_DANCE_ACTION`, `M_SLEEP_ACTION`, `M_EAT_ACTION`, `M_NOD_HEAD`, `M_SHAKE_HEAD`, `M_TAIL_WAG`.
+
+### 4. Neuromoduladores Biológicos
+- **Dopamina (DA):** Sinal de recompensa, novidade e incentivo à exploração.
+- **Noradrenalina (NE):** Sinal de alerta, foco súbito, surpresa e estresse agudo.
+- **Serotonina (SER):** Saciedade, bem-estar, afeto consolidado e alívio pós-choque.
+- **Acetilcolina (ACh):** Atenção seletiva, foco no trabalho e gravação de memória.
+- **Cortisol (CORT):** Estresse crônico, fadiga e abandono prolongado.
+
+---
+
+## 🐣 Ciclo Ontogenético e Janela Crítica de Aprendizado
+
+O módulo de ontogenia (`src/core/ontogeny.c/h`) opera com aritmética de ponto fixo `fix16_t` (Q8.8) e inteiros de 32 bits:
+
+### 1. Freio Inibitório da Janela Crítica (`brake` Q0.32)
+Para cada um dos 120 pools biológicos:
+- A cada segundo de vigília, se o pool apresentar atividade mínima (`act_ema >= act_min`):
+  - **Domínio de Padrões (`err_ema < theta_lo`):** O freio cresce proporcionalmente à precisão preditiva:
+    $$\Delta = \left(\frac{2^{32}}{T}\right) \cdot m \cdot \text{act\_ema}$$
+  - **Surpresa Crônica (`err_ema > theta_hi`):** O freio regride (reabrindo a plasticidade) em velocidade 4× mais lenta que o fechamento.
+- **Taxa de Aprendizado Efetiva:**
+  $$\text{lr} = \max(\text{piso}, 1 - \text{brake})$$
+  *(Filhotes aprendem a 100%; veteranos retêm ~5% de piso para adaptações sutis).*
+
+### 2. Estágios do Desenvolvimento
+| Estágio | Maturidade Média | Comportamento e Fisiologia |
 |---|---|---|
-| `VOICE_COOLDOWN_PURR` | 3.0 s | Ronron sustentado sem saturar |
-| `VOICE_COOLDOWN_CHIRP` | 1.5 s | Pios de curiosidade e felicidade |
-| `VOICE_COOLDOWN_ALARM` | 2.0 s | Squeak e hiss de susto/raiva |
-| `VOICE_COOLDOWN_GROWL` | 2.5 s | Growl moderado |
-| `VOICE_COOLDOWN_TRILL` | 4.0 s | Trilo de alegria espaçado |
-| `VOICE_COOLDOWN_WHINE` | 5.0 s | Reclamação e saudade pouco frequentes |
-| `VOICE_COOLDOWN_GRUNT` | 20.0 s | Bocejo raro e orgânico |
+| **Filhote (`ONTO_FILHOTE`)** | $0\% \le \text{freio} < 25\%$ | Hiperativo, voz aguda ($1.35\times$), corpo elástico e macio, curiosidade elevada. |
+| **Juvenil (`ONTO_JUVENIL`)** | $25\% \le \text{freio} < 60\%$ | Voz intermediária ($1.15\times$), formação de hábitos, consolidação no sono. |
+| **Adulto (`ONTO_ADULTO`)** | $60\% \le \text{freio} < 90\%$ | Voz balanceada ($1.00\times$), temperamento firme, afeto consolidado ao dono. |
+| **Veterano (`ONTO_VETERANO`)** | $90\% \le \text{freio} \le 100\%$ | Voz profunda ($0.88\times$), alta fidelidade, projeções cristalizadas em `int8`. |
 
 ---
 
-## 🌐 Sensores e percepção
+## 💾 Memória Episódica SDM (Kanerva) & Curiosidade (Schmidhuber)
 
-- **Mouse:** velocidade e aceleração (px/s, px/s²), sacudida com intensidade escalonada, rubbing sobre o corpo liberando dopamina e vetor relativo ao centro do pet
-- **Scroll:** vento da roda do mouse que influencia a pose (recuo, olhos fechados, desvio corporal)
-- **Heatmap:** grade de visitas do cursor, usada por `behavior_explore` para buscar zonas frias
-- **Luminância:** pupilas contraem com luma alta e dilatam no escuro
-- **Carga do sistema:** CPU alta eleva o cortisol (estresse)
-- **Janelas:** galhos de pouso, quina de perigo (botão fechar), Alt+Tab e retângulo da janela ativa
-- **Microfone:** RMS ambiente para detectar palmas, gritos e voz
-- **Texto da tela:** palavras e títulos da janela em foco alimentando o léxico, sem OCR
+### 1. Sparse Distributed Memory (Hipervetores de 2048 Bits)
+Implementada em `src/core/sdm.c/h`:
+- **Álgebra de Hipervetores:** Operador Bind ($\otimes$) via XOR bit a bit em blocos de 64 bits (`uint64_t`) e Bundle ($\oplus$) via votação majoritária com contadores saturantes.
+- **Conclusão de Padrão (Pattern Completion):** 128 hard locations distribuídas. O mascote recorda episódios passados mesmo com ruídos de até 15% nos estímulos de entrada.
+- **Poda Sináptica Noturna:** Memórias registradas apenas uma vez decaem a zero durante o sono diário, liberando espaço para novos episódios.
 
----
-
-## 🤖 Comportamentos autônomos
-
-- **Default Mode Network (DMN):** só ativa na inatividade. Estados: `DMN_YAWN` (stretch + grunt), `DMN_GROOMING` (jiggle), `DMN_MICRO_CHIRP` (trilo espontâneo) e `DMN_LOOK_AROUND`
-- **Vínculo (bond):** acumula tempo de interação, detecta saudade (`behavior_bond_is_longing`) e reforça o apego após sacudidas
-- **Exploração:** aprende posições favoritas e direciona o movimento para regiões não visitadas
-- **Esconder e caçar:** foge sob estresse e caça o cursor com bom humor
-- **Pouso:** usa o topo da janela ativa como galho
-- **Susto → alívio:** choque imediato seguido de relaxamento com serotonina
+### 2. Curiosidade Guiada por Progresso de Compressão
+Baseado na teoria de Jürgen Schmidhuber:
+$$\text{Progresso} = \text{Erro}_{t-1} - \text{Erro}_t$$
+- **Aprendizado Ativo ($\Delta \text{err} < -2$):** Injeta Dopamina intrínseca por ter decodificado o ambiente.
+- **Tédio por Estagnação ($\Delta \text{err} \approx 0$ com erro baixo):** O ambiente ficou previsível demais; eleva a curiosidade para estimular a exploração territorial.
 
 ---
 
-## 💾 Persistência e sono
+## 🎰 Bandit Dopaminérgico UCB1 & Detecção de Fadiga Humana
 
-- A cada 60 s e ao fechar, pesos plásticos e estados hormonais são gravados em `caddin.brain`
-- A gravação é atômica e validada por CRC32 (veja a [v1.2.0](#-novidades-da-v120))
-- Durante o sono, `lexicon_consolidate_sleep` remove ruídos e consolida memórias salientes
+### 1. Estimador de Fadiga do Usuário (`src/sense/sense_fatigue.c/h`)
+Calcula a exaustão física e cognitiva baseando-se em:
+- Horas contínuas de tela sem pausas.
+- Cadência de digitação (keystrokes por segundo).
+- Variância do intervalo entre teclas (irregularidade motora).
+- Jitter e micro-tremores na velocidade do mouse.
+
+### 2. Algoritmo UCB1 e Ações Empáticas
+Quando a fadiga ultrapassa o limiar e respeitado um cooldown de 5 minutos, o mascote executa:
+- `ARM_SILENT`: Observação discreta sem perturbação.
+- `ARM_SUGGEST_PAUSE`: Deita-se e emite ronrom suave sugerindo descanso mútuo.
+- `ARM_CHEER_PLAY`: Dá um pulo com som alegre de chirp para descontrair a mente.
+- `ARM_STRETCH_WATER`: Espreguiça-se com jiggle elástico convidando a beber água.
+- **Feedback Implícito:** Carinho após intervenção = $+1.0$; sacudida violenta = $-1.0$.
 
 ---
 
-## 🧪 Testes
+## 🎙️ Maturação Vocal & Síntese Procedural Acústica
 
-```bash
-make test
+A geração de som do Caddin opera a **16.000 Hz sem arquivos WAV ou MP3 em disco**. O áudio é sintetizado em tempo real com ondas senoidais, ruído branco (xorshift32), modulações de amplitude (AM) e envelopes biológicos ADSR.
+
+| Identificador | Significado Biológico | Estrutura Acústica da Onda |
+|---|---|---|
+| `VOICE_PURR_CONTENT` | Carinho moderado | Onda de 68 Hz com AM triangular de 20 Hz e sopro suave. |
+| `VOICE_PURR_DEEP` | Afeto prolongado / relaxamento | Onda fundamental de 55 Hz rica em 3 harmônicos e vibrato profundo. |
+| `VOICE_TRILL` | Alegria efervescente / comemoração | Sequência de 3 chirps rápidos ascendentes (450→780 Hz). |
+| `VOICE_CHIRP_HAPPY` | Resposta a toque gentil | Duas notas harmônicas (500 Hz e 660 Hz) com decaimento suave. |
+| `VOICE_CHIRP_CURIOUS` | Curiosidade e inspeção | Sweep ascendente 380→760 Hz com vibrato progressivo. |
+| `VOICE_GRUNT_IDLE` | Bocejo ou alívio | Sweep descendente 320→160 Hz com rouquidão gutural. |
+| `VOICE_WHINE_PROTEST` | Saudade ou protesto suave | Descida tonal arrastada com vibrato melancólico. |
+| `VOICE_GROWL_ANNOYED` | Irritação ou incômodo | Frequência de 160 Hz com harmônicos inarmônicos felinos. |
+| `VOICE_HISS_ANGRY` | Raiva extrema / agressão | Ruído branco puro estocástico com envelope quadrático. |
+| `VOICE_SQUEAK_STARTLED` | Susto agudo / choque súbito | Queda rápida 1300→550 Hz sem ataque para expressar sobressalto. |
+| `VOICE_CRY_DISTRESS` | Angústia por solidão crônica | Vibrato profundo de $\pm 40$ Hz com soluços respiratórios. |
+
+---
+
+## 🍮 Física Elástica Softbody e Reações Mecânicas
+
+O corpo do Caddin é modelado por um sistema contínuo de osciladores harmônicos amortecidos em 2D:
+
+$$m \frac{d^2 x}{dt^2} + c \frac{dx}{dt} + k (x - x_0) = F_{\text{inércia}} + F_{\text{impacto}} + F_{\text{respiração}}$$
+
+- **Squish (Compressão Vertical):** Amortece quedas e colisões contra as bordas da tela.
+- **Stretch (Alongamento Vertical):** Ativado em impulsos de salto ou ao ser erguido pelo mouse.
+- **Shear / Jiggle (Deformação Lateral):** Responde ao arrasto inercial do mouse e vibrações comemorativas.
+- **Acoplamento Respiratório com CPG:** O Central Pattern Generator expande sutilmente o perímetro do mascote a cada ciclo respiratório.
+
+---
+
+## 👁️ Percepção Contextual de Janelas, Código e Privacidade
+
+O sensor de texto (`src/sense/sense_text.c/h`) examina a janela do sistema operacional em foco:
+- **Detecção de Erros de Código:** Reconhece `"error"`, `"failed"`, `"segfault"`, `"panic"`, `"exception"`. Causa injeção de noradrenalina/cortisol, achatamento corporal (squish) e som de resmungo (`VOICE_WHINE_PROTEST`).
+- **Detecção de Sucessos de Build:** Reconhece `"success"`, `"passed"`, `"100%"`, `"completed"`. Gera pulso de dopamina/serotonina, salto com jiggle e trilo de alegria (`VOICE_TRILL`).
+- **Lista Estrita de Privacidade:** Ignora títulos de gerenciadores de senhas (`bitwarden`, `keepass`, `1password`), janelas anônimas e termos bancários.
+
+---
+
+## 🌅 Rituais Circadianos e Marcos de Convivência
+
+Gerenciados em `src/core/rituals.c/h`:
+- **Saudações Circadianas:** Saudação afetuosa matinal entre 6h e 10h; recolhimento noturno suave após as 22h.
+- **Marcos Históricos de Vigília:** Celebra marcos de convivência de **1 hora**, **10 horas**, **50 horas** e **100 horas** de vida acordado com dança comemorativa e trilos vocais.
+
+---
+
+## ⌨️ Biometria de Digitação (IKD) & Resumo Diário de Foco
+
+- **Imprinting do Ritmo de Digitação (`src/sense/sense_keystroke_biometrics.c/h`):** Mede o atraso entre teclas (IKD) em 16 bins. Consolida o perfil do dono no sono (`caddin.keys`). Se a cadência for do dono (similaridade $> 0.85$), induz serotonina e afeto; se for de um estranho, induz alerta.
+- **Resumo Diário de Produtividade (`src/core/daily_summary.c/h`):** Registra em `caddin_daily.log` e exibe no terminal ao fechar: horas de convivência, teclas digitadas, carinhos, sacudidas, builds de sucesso e intervenções de fadiga.
+
+---
+
+## 📊 Monitor de Telemetria e Spikes em Terminal ANSI
+
+Utilitário executável compilado em **C11 puro** (`tools/caddin_monitor.c`):
+- Conecta-se à FIFO `/tmp/caddin_telemetry.fifo` e plota em tempo real com cores ANSI 256:
+  - Níveis gráficos de Dopamina, Noradrenalina, Serotonina e Cortisol.
+  - Estágio de vida e porcentagem exata do freio ontogenético da janela crítica.
+  - Matriz visual dos 120 pools biológicos da SNN e atividade dos 2048 neurônios a 10 Hz.
+  - Nível de fadiga e ações ativas do Bandit UCB1.
+
+---
+
+## 🎛️ Motor de Regras Customizáveis (.caddinrc)
+
+Crie um arquivo `.caddinrc` na pasta do executável ou em `$HOME/.caddinrc`:
+
+```ini
+[privacy]
+keepass
+bitwarden
+1password
+private window
+bank
+
+# Se estiver compilando código no terminal, fica alerta e curioso
+[rule:build_focus]
+window = gcc
+action = react_curious
+param = 0.8
+cooldown = 15.0
+
+# Se estiver assistindo vídeos tarde da noite, induz calma
+[rule:night_youtube]
+window = youtube
+hour_min = 23
+hour_max = 6
+action = inject_ser
+param = 0.1
+cooldown = 60.0
+
+# Em editores de código, estimula dopamina e atenção
+[rule:editor_flow]
+window = code
+action = inject_da
+param = 0.08
+cooldown = 30.0
 ```
 
-```text
-1/7 Test #1: CoreTest .......... Passed
-2/7 Test #2: SnnTest ........... Passed
-3/7 Test #3: BiologyTest ....... Passed
-4/7 Test #4: SensorsTest ....... Passed
-5/7 Test #5: BodyTest .......... Passed
-6/7 Test #6: MindLangTest ...... Passed
-7/7 Test #7: NewModulesTest .... Passed
+---
 
-100% tests passed, 0 tests failed out of 7
-```
+## 🛡️ Persistência Atômica v2 com Integridade CRC32
 
-| Teste | Cobertura |
-|---|---|
-| `test_core.c` | Aritmética Q8.8, arena allocator, RNG |
-| `test_snn.c` | SNN LIF, CSR, R-STDP, STP Tsodyks-Markram |
-| `test_biology.c` | Neuromoduladores, CPG, predição temporal |
-| `test_sensors.c` | Mouse, scroll, janelas, heatmap, luma, sysload |
-| `test_body.c` | 11 vozes (duração, energia, sem clipping, idle garantido) e paleta cromática |
-| `test_mind_lang.c` | Global Workspace, lexicon, consolidação no sono |
-| `test_new_modules.c` | DMN, bond, explore, audio_out |
+Todas as memórias do pet são salvas sem risco de corrupção:
+- `caddin.brain`: Pesos sinápticos e topologia da rede SNN.
+- `caddin.onto`: Estado ontogenético, estágios de vida e imprinting acústico.
+- `caddin.sdm`: Memória episódica hiperdimensional distribuída.
+- `caddin.bandit`: Modelo de aprendizado por reforço UCB1 de intervenções de fadiga.
+- `caddin.keys`: Perfil biométrico de ritmo de digitação do dono.
+- `caddin_daily.log`: Histórico diário de convivência e foco.
+
+Cada arquivo utiliza cabeçalho com Magic Number (`CADD`), contagem de versão, timestamp e checksum **CRC32 (IEEE 802.3)**, gravados através de escrita atômica em arquivo temporário seguida de substituição atômica (`rename()` no POSIX / `MoveFileExA` no Windows).
 
 ---
 
-## 📁 Estrutura do projeto
+## 📁 Estrutura de Diretórios do Projeto
 
 ```
 caddin/
-├── BUILD.md                  # Build, dependências e cross-compile
-├── CMakeLists.txt            # Configuração CMake
-├── Makefile                  # Atalhos: make, make run, make test, make windows
-├── README.md
-├── RELEASE_NOTES_v1.1.6.md
-├── install.sh                # Setup e instalação de pacotes
-├── caddin.brain              # Estado sináptico (gerado em runtime)
+├── CMakeLists.txt            # Build system para Linux e Windows
+├── Makefile                  # Comandos: all, test, windows, run, clean
+├── README.md                 # Documentação completa do projeto
+├── .caddinrc.example         # Exemplo de regras customizáveis e privacidade
 ├── behavior.c/.h             # Instintos base
 ├── conditioning.c/.h         # Condicionamento clássico e operante
 ├── homeostasis.c/.h          # Balanço homeostático
-├── memory.c/.h               # Memória episódica e consolidação
+├── memory.c/.h               # Memória associativa legada
 ├── network_data.h            # Topologia de rede e estruturas neurais
 ├── neuro.c/.h                # Módulo neuromórfico auxiliar
 ├── runtime_types.h           # Tipos fundamentais do runtime
 ├── sensors.c/.h              # Interface agregadora sensorial
 ├── cmake/
 │   └── mingw-w64.cmake       # Toolchain para cross-compile Windows
-├── docs/
-│   └── PLANO_MESTRE_EVOLUCAO_CADDIN.md
 ├── src/
 │   ├── main.c                # Loop principal (60 FPS, dt fixo, zero malloc)
 │   ├── config.h              # Constantes, física, janelas e limiares
 │   ├── animation/            # animation, autonomy, emotions, softbody
-│   ├── behavior/             # bond, dmn, explore, hide_hunt, perch, startle_relief
+│   ├── behavior/             # bond, dance, dmn, explore, hide_hunt, perch, startle_relief
 │   ├── body/                 # audio_out, palette, voice_synth
-│   ├── core/                 # arena, cpg, fixed, neuromod, persist, predict, rng, snn
+│   ├── core/                 # arena, bandit, config_rules, cpg, daily_summary, event_ring,
+│   │                         # fixed, neuromod, ontogeny, persist, predict, rituals, rng,
+│   │                         # sdm, snn, telemetry_fifo
 │   ├── lang/                 # lexicon
 │   ├── mind/                 # workspace
 │   ├── platform/             # window.h, window_win32, window_x11, x11_cursor
 │   ├── renderer/             # face, pixel_draw
-│   └── sense/                # heatmap, luma, mic, mouse, scroll, sysload, text, windows
-└── tests/                    # test_biology, test_body, test_core, test_mind_lang,
-                              # test_new_modules, test_sensors, test_snn
+│   └── sense/                # fatigue, heatmap, keystroke_biometrics, luma, mic, mouse,
+│                             # music, scroll, sysload, text, windows
+├── tests/                    # 13 suítes completas de testes unitários automatizados
+└── tools/
+    └── caddin_monitor.c      # Monitor de telemetria em terminal ANSI 100% C
 ```
 
 ---
 
-## 📋 Histórico de versões
+## 📋 Histórico de Versões e Evolução
 
 | Versão | Neurônios | Arquitetura | Destaque |
 |---|---|---|---|
-| **v1.2.0** | **2048** (512 + 1152 + 384) | SNN escalonada, persistência v2 CRC32, multimodal | Hide/hunt, perch, susto→alívio, microfone e leitura de texto |
+| **v1.4.0** | **2048** (512 + 1152 + 384) | Ontogenia biológica, SDM 2048b, UCB1, Biometria, Telemetria | Estágios de maturação, Kanerva SDM, curiosidade Schmidhuber, Bandit UCB1, fadiga, rituais, biometria IKD, monitor ANSI em C puro |
+| **v1.2.0** | 2048 (512 + 1152 + 384) | SNN escalonada, persistência v2 CRC32, multimodal | Hide/hunt, perch, susto→alívio, microfone e leitura de texto |
 | **v1.1.6** | 1024 (256 + 768) | SNN LIF com CSR escalável a 2048+ | 11 vozes emocionais, `voice_synth_trigger_ex()`, mapeamento por `state_timer` |
 | **v1.1.5** | 1024 | Áudio desacoplado do motor, modulação emocional | Voz ligada às emoções, cooldowns por tipo, fix do reflexo nociceptivo |
 | **v1.1.4** | 1024 | Injeção aferente de 6 sensores, DMN/Bond | ALSA/WinMM non-blocking, scroll, janela ativa, 3 comportamentos autônomos |
@@ -433,24 +411,68 @@ caddin/
 
 ---
 
-## 🗓️ Roadmap
+## 🛠️ Guia de Compilação, Cross-Compile e Deploy
 
-### ✅ Concluído até a v1.2.0
+### Compilação Nativa no Linux:
+```bash
+make
+make test
+```
 
-- **P1:** correção de bugs críticos (áudio mudo, centro de carinho, scroll wheel, colisão de janela)
-- **P2:** bioacústica completa (11 vozes, intensidade adaptativa, cooldowns)
-- **P3:** sensores e comportamentos autônomos (`sysload`, `luma`, `heatmap`, DMN, bond, explore)
-- **P4:** persistência v2 com escrita atômica e CRC32
-- **P5:** comportamentos avançados (hide/hunt, perch, susto→alívio)
-- **P6:** percepção multimodal (microfone e leitura de texto)
-- **Escalonamento neural** para 2048 neurônios
+### Compilação Cruzada para Windows:
+```bash
+make windows
+# Gera executáveis estáticos e portáteis:
+# build-windows/caddin.exe
+# build-windows/caddin_monitor.exe
+```
+
+---
+
+## 🧪 Suíte de Testes Automatizada (13/13 Aprovadas)
+
+O projeto conta com **13 suítes completas de testes automatizados**, cobrindo 100% dos subsistemas neurais, sensoriais e corporais:
+
+```bash
+cd build && ctest --output-on-failure
+```
+
+```
+Test project /home/carlos/Antigravity/caddin/build
+      Start  1: CoreTest .........................   Passed    (0.04 sec)
+      Start  2: SnnTest ..........................   Passed    (0.34 sec)
+      Start  3: BiologyTest ......................   Passed    (0.00 sec)
+      Start  4: SensorsTest ......................   Passed    (0.01 sec)
+      Start  5: BodyTest .........................   Passed    (0.01 sec)
+      Start  6: MindLangTest .....................   Passed    (0.01 sec)
+      Start  7: NewModulesTest ...................   Passed    (0.04 sec)
+      Start  8: OntogenyTest .....................   Passed    (0.05 sec) [3.877 verificações]
+      Start  9: ConfigRulesTest ..................   Passed    (0.01 sec)
+      Start 10: SdmTest ..........................   Passed    (0.01 sec) [100% de similaridade]
+      Start 11: RitualsTest ......................   Passed    (0.01 sec) [Ciclo circadiano e marcos]
+      Start 12: Fase5Test ........................   Passed    (0.01 sec) [EventRing, UCB1, Fadiga]
+      Start 13: Fase6Test ........................   Passed    (0.01 sec) [Biometria, Resumo, Telemetria]
+
+100% tests passed, 0 tests failed out of 13
+```
+
+---
+
+## 🎮 Controles, Interações e Atalhos
+
+| Entrada | Efeito Físico e Reação Neurobiológica |
+|---|---|
+| **Arrastar (Botão Esquerdo)** | Segura o corpo mole com estiramento inercial e reação tátil imediata. |
+| **Passar o Cursor Gentilmente** | Afeto e carinho: estimula dopamina, serotonina e dispara ronronares confortáveis. |
+| **Sacudir o Mouse com Violência** | Reflexo nociceptivo espinhal: contração brusca (squish), choque e squeak agudo de susto. |
+| **Roda do Mouse (Scroll)** | Provoca cócegas e pequenas agitações laterais. |
+| **Barra de Espaço** | Impulso cinético vertical com salto elástico. |
+| **Setas Direcionais (← / ↑ / → / ↓)** | Aplica forças cinéticas nas 4 direções ortogonais. |
+| **Tecla 'R'** | Reseta a habituação sensorial da SNN, restaurando a sensibilidade a novidades. |
 
 ---
 
 ## 📄 Licença
 
-Projeto acadêmico / experimental, desenvolvido por **HololiveStudios**.
-
-<div align="center">
-
-*Caddin v1.2.0, compilado e testado em Linux (GCC, ALSA) e Windows (MinGW-w64, WinMM)*
+Desenvolvido com carinho e rigor técnico por **HololiveStudios**.  
+Código aberto sob a licença **MIT Open Experimental**.

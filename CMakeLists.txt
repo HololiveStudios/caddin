@@ -46,6 +46,16 @@ set(CORE_SRCS
     src/core/cpg.c
     src/core/predict.c
     src/core/persist.c
+    src/core/ontogeny.c
+    src/core/config_rules.c
+    src/core/sdm.c
+    src/core/rituals.c
+    src/core/event_ring.c
+    src/core/bandit.c
+    src/core/daily_summary.c
+    src/core/telemetry_fifo.c
+    src/sense/sense_fatigue.c
+    src/sense/sense_keystroke_biometrics.c
     src/sense/sense_mouse.c
     src/sense/sense_scroll.c
     src/sense/sense_windows.c
@@ -166,3 +176,37 @@ target_include_directories(test_new_modules PRIVATE
 )
 target_link_libraries(test_new_modules PRIVATE m ${PLATFORM_LIBS})
 add_test(NAME NewModulesTest COMMAND test_new_modules)
+
+add_executable(test_ontogeny src/core/ontogeny.c tests/test_ontogeny.c)
+target_include_directories(test_ontogeny PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(test_ontogeny PRIVATE m)
+add_test(NAME OntogenyTest COMMAND test_ontogeny)
+
+add_executable(test_config_rules src/core/config_rules.c tests/test_config_rules.c)
+target_include_directories(test_config_rules PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(test_config_rules PRIVATE m)
+add_test(NAME ConfigRulesTest COMMAND test_config_rules)
+
+add_executable(test_sdm src/core/sdm.c tests/test_sdm.c)
+target_include_directories(test_sdm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(test_sdm PRIVATE m)
+add_test(NAME SdmTest COMMAND test_sdm)
+
+add_executable(test_rituals src/core/rituals.c tests/test_rituals.c)
+target_include_directories(test_rituals PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(test_rituals PRIVATE m)
+add_test(NAME RitualsTest COMMAND test_rituals)
+
+add_executable(test_fase5 src/core/event_ring.c src/core/bandit.c src/sense/sense_fatigue.c tests/test_fase5.c)
+target_include_directories(test_fase5 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core ${CMAKE_CURRENT_SOURCE_DIR}/src/sense)
+target_link_libraries(test_fase5 PRIVATE m)
+add_test(NAME Fase5Test COMMAND test_fase5)
+
+add_executable(test_fase6 src/sense/sense_keystroke_biometrics.c src/core/daily_summary.c src/core/telemetry_fifo.c tests/test_fase6.c)
+target_include_directories(test_fase6 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core ${CMAKE_CURRENT_SOURCE_DIR}/src/sense)
+target_link_libraries(test_fase6 PRIVATE m)
+add_test(NAME Fase6Test COMMAND test_fase6)
+
+# ── Ferramenta CLI de Monitoramento de Spikes / Telemetria em C Puro ──
+add_executable(caddin_monitor tools/caddin_monitor.c src/core/telemetry_fifo.c)
+target_include_directories(caddin_monitor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)

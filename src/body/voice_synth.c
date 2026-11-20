@@ -57,6 +57,18 @@ void voice_synth_init(VoiceSynth *vs, uint32_t sample_rate) {
     vs->sample_rate  = (sample_rate > 0) ? sample_rate : 16000;
     vs->noise_seed   = 0xDEADBEEFu;
     vs->intensity    = 0.5f;
+    vs->pitch_scale  = 1.0f;
+}
+
+void voice_synth_set_maturity_stage(VoiceSynth *vs, int stage) {
+    if (!vs) return;
+    switch (stage) {
+    case 0: /* ONTO_FILHOTE */  vs->pitch_scale = 1.35f; break;
+    case 1: /* ONTO_JUVENIL */  vs->pitch_scale = 1.15f; break;
+    case 2: /* ONTO_ADULTO */   vs->pitch_scale = 1.00f; break;
+    case 3: /* ONTO_VETERANO */ vs->pitch_scale = 0.88f; break;
+    default: vs->pitch_scale = 1.00f; break;
+    }
 }
 
 /* ---------------------------------------------------------------------------
@@ -206,6 +218,13 @@ void voice_synth_trigger_ex(VoiceSynth *vs, VoiceType type,
         vs->total_samples = 0;
         vs->current_type  = VOICE_IDLE;
         break;
+    }
+
+    /* Modulação ontogenética de pitch (maturação vocal de filhote a veterano) */
+    if (vs->pitch_scale > 0.1f && vs->current_type != VOICE_IDLE) {
+        vs->f0 *= vs->pitch_scale;
+        vs->f1 *= vs->pitch_scale;
+        vs->f2 *= vs->pitch_scale;
     }
 }
 

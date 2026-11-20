@@ -34,4 +34,7 @@ void  softbody_stretch  (SoftBody *sb, float amount);   /* Esticamento vertical 
 void  softbody_jiggle   (SoftBody *sb, float intensity);/* Cutucada / clique / pulo */
 void  softbody_purr     (SoftBody *sb, float duration); /* Ronronar em carinho */
 
+/* Modulação física ontogenética (0=filhote elástico -> 3=veterano firme) */
+void  softbody_set_maturity_stage(SoftBody *sb, int stage);
+
 #endif /* CORTEX_SOFTBODY_H */

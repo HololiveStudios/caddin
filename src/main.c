@@ -25,6 +25,16 @@
 #include "core/neuromod.h"
 #include "core/cpg.h"
 #include "core/predict.h"
+#include "core/ontogeny.h"
+#include "core/config_rules.h"
+#include "core/sdm.h"
+#include "core/rituals.h"
+#include "core/event_ring.h"
+#include "core/bandit.h"
+#include "core/daily_summary.h"
+#include "core/telemetry_fifo.h"
+#include "sense/sense_fatigue.h"
+#include "sense/sense_keystroke_biometrics.h"
 #include "sense/sense_mouse.h"
 #include "sense/sense_scroll.h"
 #include "sense/sense_windows.h"
@@ -50,6 +60,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include <time.h>
 #include <signal.h>
 
@@ -100,9 +111,271 @@ static double now_seconds(void) { return (double)clock() / CLOCKS_PER_SEC; }
 /* Caminho do arquivo de persistência sináptica */
 #define BRAIN_FILE        "caddin.brain"
 #define BRAIN_FILE_LEGACY "cortex_pet.brain"
+#define ONTO_FILE         "caddin.onto"
+#define SDM_FILE          "caddin.sdm"
 
 /* Intervalo de auto-save (em segundos) */
 #define AUTOSAVE_INTERVAL 60.0
+
+static void sdm_save_state(const SparseDistributedMemory *sdm, const char *path) {
+    if (!sdm || !path) return;
+    char tmp[512];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return;
+
+    static uint8_t sdm_buf[sizeof(sdm->counters) + 64];
+    size_t sz = sdm_serialize(sdm, sdm_buf, sizeof(sdm_buf));
+    if (sz > 0) {
+        fwrite(sdm_buf, 1, sz, f);
+    }
+    fflush(f);
+    fclose(f);
+
+#ifdef _WIN32
+    MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+#else
+    rename(tmp, path);
+#endif
+}
+
+static bool sdm_load_state(SparseDistributedMemory *sdm, const char *path) {
+    if (!sdm || !path) return false;
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+
+    static uint8_t sdm_buf[sizeof(sdm->counters) + 64];
+    size_t read_bytes = fread(sdm_buf, 1, sizeof(sdm_buf), f);
+    fclose(f);
+
+    return sdm_deserialize(sdm, sdm_buf, read_bytes);
+}
+
+#define BANDIT_FILE "caddin.bandit"
+#define KEYS_FILE   "caddin.keys"
+#define DAILY_LOG   "caddin_daily.log"
+
+static void keys_save_state(const SenseKeystrokeBiometrics *kb, const char *path) {
+    if (!kb || !path) return;
+    char tmp[512];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return;
+
+    static uint8_t buf[256];
+    size_t sz = sense_keystroke_serialize(kb, buf, sizeof(buf));
+    if (sz > 0) {
+        fwrite(buf, 1, sz, f);
+    }
+    fflush(f);
+    fclose(f);
+
+#ifdef _WIN32
+    MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+#else
+    rename(tmp, path);
+#endif
+}
+
+static bool keys_load_state(SenseKeystrokeBiometrics *kb, const char *path) {
+    if (!kb || !path) return false;
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+
+    static uint8_t buf[256];
+    size_t read_bytes = fread(buf, 1, sizeof(buf), f);
+    fclose(f);
+    if (read_bytes == 0) return false;
+
+    return sense_keystroke_deserialize(kb, buf, read_bytes);
+}
+
+static void bandit_save_state(const DopaminergicBandit *b, const char *path) {
+    if (!b || !path) return;
+    char tmp[512];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return;
+
+    static uint8_t buf[256];
+    size_t sz = bandit_serialize(b, buf, sizeof(buf));
+    if (sz > 0) {
+        fwrite(buf, 1, sz, f);
+    }
+    fflush(f);
+    fclose(f);
+
+#ifdef _WIN32
+    MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+#else
+    rename(tmp, path);
+#endif
+}
+
+static bool bandit_load_state(DopaminergicBandit *b, const char *path) {
+    if (!b || !path) return false;
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+
+    static uint8_t buf[256];
+    size_t read_bytes = fread(buf, 1, sizeof(buf), f);
+    fclose(f);
+
+    return bandit_deserialize(b, buf, read_bytes);
+}
+
+static void onto_save_state(const Ontogeny *o, const Imprint *im, const char *path) {
+    if (!o || !im || !path) return;
+    char tmp[512];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return;
+
+    static uint8_t onto_buf[32768];
+    static uint8_t impr_buf[64];
+    size_t onto_sz = onto_serialize(o, onto_buf, sizeof(onto_buf));
+    size_t impr_sz = imprint_serialize(im, impr_buf, sizeof(impr_buf));
+
+    uint32_t magic = 0x4F4E544F; /* "ONTO" */
+    uint32_t sz1 = (uint32_t)onto_sz;
+    uint32_t sz2 = (uint32_t)impr_sz;
+
+    fwrite(&magic, 4, 1, f);
+    fwrite(&sz1, 4, 1, f);
+    if (onto_sz > 0) fwrite(onto_buf, 1, onto_sz, f);
+    fwrite(&sz2, 4, 1, f);
+    if (impr_sz > 0) fwrite(impr_buf, 1, impr_sz, f);
+
+    fflush(f);
+    fclose(f);
+
+#ifdef _WIN32
+    MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+#else
+    rename(tmp, path);
+#endif
+}
+
+static bool onto_load_state(Ontogeny *o, Imprint *im, const char *path) {
+    if (!o || !im || !path) return false;
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+
+    uint32_t magic = 0, sz1 = 0, sz2 = 0;
+    if (fread(&magic, 4, 1, f) != 1 || magic != 0x4F4E544F) {
+        fclose(f);
+        return false;
+    }
+    if (fread(&sz1, 4, 1, f) != 1 || sz1 > 65536) {
+        fclose(f);
+        return false;
+    }
+    static uint8_t onto_buf[65536];
+    if (fread(onto_buf, 1, sz1, f) != sz1) {
+        fclose(f);
+        return false;
+    }
+    if (fread(&sz2, 4, 1, f) != 1 || sz2 > 256) {
+        fclose(f);
+        return false;
+    }
+    static uint8_t impr_buf[256];
+    if (fread(impr_buf, 1, sz2, f) != sz2) {
+        fclose(f);
+        return false;
+    }
+    fclose(f);
+
+    bool ok1 = (onto_deserialize(o, onto_buf, sz1) == 1);
+    bool ok2 = (imprint_deserialize(im, impr_buf, sz2) == 1);
+    return ok1 && ok2;
+}
+
+typedef struct {
+    Neuromodulators *neuromod;
+    SoftBody        *sb;
+    VoiceSynth      *voice;
+    Drives          *drives;
+    double           now_s;
+} RuleContext;
+
+static void handle_rule_action(const char *action, float param, void *ctx) {
+    RuleContext *rc = (RuleContext *)ctx;
+    if (!rc || !action) return;
+
+    if (strcmp(action, "inject_da") == 0) {
+        neuromod_inject_da(rc->neuromod, fix_from_float(param > 0 ? param : 0.1f));
+    } else if (strcmp(action, "inject_ne") == 0) {
+        neuromod_inject_ne(rc->neuromod, fix_from_float(param > 0 ? param : 0.1f));
+    } else if (strcmp(action, "inject_cort") == 0) {
+        neuromod_inject_cort(rc->neuromod, fix_from_float(param > 0 ? param : 0.1f));
+    } else if (strcmp(action, "inject_ser") == 0) {
+        neuromod_inject_ser(rc->neuromod, fix_from_float(param > 0 ? param : 0.1f));
+    } else if (strcmp(action, "react_happy") == 0) {
+        neuromod_inject_da(rc->neuromod, fix_from_float(0.15f));
+        softbody_jiggle(rc->sb, 0.35f);
+    } else if (strcmp(action, "react_sad") == 0) {
+        neuromod_inject_cort(rc->neuromod, fix_from_float(0.12f));
+        softbody_squish(rc->sb, 0.30f);
+    } else if (strcmp(action, "react_curious") == 0) {
+        neuromod_inject_ne(rc->neuromod, fix_from_float(0.08f));
+        softbody_jiggle(rc->sb, 0.25f);
+    }
+}
+
+static void record_episode_sdm(SparseDistributedMemory *sdm, const char *win_title,
+                               int hour, double valence, double stress, int event_type) {
+    if (!sdm) return;
+    EpisodeDescriptor ep;
+    memset(&ep, 0, sizeof(ep));
+    snprintf(ep.window_name, sizeof(ep.window_name), "%s", win_title ? win_title : "");
+    ep.hour = (hour >= 0 && hour < 24) ? hour : 12;
+    ep.valence_level = (int)round(valence * 2.0);
+    if (ep.valence_level > 2) ep.valence_level = 2;
+    if (ep.valence_level < -2) ep.valence_level = -2;
+    ep.stress_level = (int)round(stress * 3.0);
+    if (ep.stress_level > 3) ep.stress_level = 3;
+    if (ep.stress_level < 0) ep.stress_level = 0;
+    ep.event_type = event_type;
+
+    Hypervector vec = sdm_encode_episode(&ep);
+    sdm_store(sdm, vec, vec);
+}
+
+typedef struct {
+    VoiceSynth      *voice;
+    SoftBody        *sb;
+    Neuromodulators *neuromod;
+    Drives          *drives;
+    double           now_s;
+} MainRitualContext;
+
+static void on_milestone_reached(uint32_t hours, void *ctx) {
+    MainRitualContext *rc = (MainRitualContext *)ctx;
+    if (!rc) return;
+    printf("[RITUAL] 🎉 Marco alcançado: %u hora(s) de convivência com o Caddin!\n", hours);
+    neuromod_inject_da(rc->neuromod, fix_from_float(0.35f));
+    neuromod_inject_ser(rc->neuromod, fix_from_float(0.20f));
+    rc->drives->affection = 1.0;
+    softbody_jiggle(rc->sb, 0.40f);
+    voice_synth_trigger_ex(rc->voice, VOICE_TRILL, 0.50f, 0.95f);
+}
+
+static void on_circadian_greeting(bool is_morning, void *ctx) {
+    MainRitualContext *rc = (MainRitualContext *)ctx;
+    if (!rc) return;
+    if (is_morning) {
+        printf("[RITUAL] ☀️ Bom dia! Caddin despertando animado.\n");
+        neuromod_inject_da(rc->neuromod, fix_from_float(0.15f));
+        softbody_jiggle(rc->sb, 0.25f);
+        voice_synth_trigger_ex(rc->voice, VOICE_CHIRP_HAPPY, 0.22f, 0.8f);
+    } else {
+        printf("[RITUAL] 🌙 Boa noite! Caddin se preparando para repouso.\n");
+        neuromod_inject_ser(rc->neuromod, fix_from_float(0.15f));
+        softbody_squish(rc->sb, 0.20f);
+        voice_synth_trigger_ex(rc->voice, VOICE_GRUNT_IDLE, 0.40f, 0.5f);
+    }
+}
 
 /* ── Índices dos motores usados para efeitos físicos ── */
 enum {
@@ -141,6 +414,30 @@ int main(void) {
         printf("[SNN] Tabula Rasa: inicializando nova matriz sináptica.\n");
     }
 
+    /* ── Ontogenia & Imprinting ── */
+    static Ontogeny ontogeny;
+    static Imprint  imprint;
+    imprint_reset(&imprint);
+
+    if (onto_load_state(&ontogeny, &imprint, ONTO_FILE)) {
+        printf("[ONTO] Estado ontogenético carregado: %s (Estágio: %d, Vigília: %us, Ciclos de sono: %u)\n",
+               ONTO_FILE, ontogeny.stage, ontogeny.awake_s, ontogeny.sleeps);
+    } else {
+        onto_init(&ontogeny, NULL);
+        printf("[ONTO] Ontogenia inicializada (Filhote, plasticidade plena)\n");
+    }
+
+    /* ── Regras Customizáveis (.caddinrc) e Privacidade ── */
+    ConfigRules config_rules;
+    config_rules_init(&config_rules);
+    if (config_rules_load(&config_rules, ".caddinrc")) {
+        printf("[CONFIG] Regras ativas (.caddinrc): %zu regras, %zu apps ignorados.\n",
+               config_rules.num_rules, config_rules.num_ignored);
+    } else if (config_rules_load(&config_rules, "caddin.conf")) {
+        printf("[CONFIG] Regras ativas (caddin.conf): %zu regras, %zu apps ignorados.\n",
+               config_rules.num_rules, config_rules.num_ignored);
+    }
+
     Drives          drives;
     Emotion         emotion;
     Behavior        behavior;
@@ -152,6 +449,51 @@ int main(void) {
     behavior_init(&behavior, &emotion);
     conditioning_init(&cond);
     memory_init(&memory);
+
+    /* ── Memória Episódica Hiperdimensional (SDM Kanerva) ── */
+    static SparseDistributedMemory sdm_memory;
+    sdm_init(&sdm_memory, 0x1337BEEF);
+    if (sdm_load_state(&sdm_memory, SDM_FILE)) {
+        printf("[SDM] Memória episódica hiperdimensional carregada: %s\n", SDM_FILE);
+    } else {
+        printf("[SDM] Memória episódica inicializada (Tabula Rasa distribuída)\n");
+    }
+
+    /* ── Elegibilidade Estendida, Bandit Dopaminérgico e Fadiga ── */
+    EventRingBuffer event_ring;
+    event_ring_init(&event_ring);
+
+    DopaminergicBandit bandit;
+    bandit_init(&bandit);
+    if (bandit_load_state(&bandit, BANDIT_FILE)) {
+        printf("[BANDIT] Modelo de intervenção carregado: %s (%u intervenções registradas)\n",
+               BANDIT_FILE, bandit.total_pulls);
+    } else {
+        printf("[BANDIT] Aprendizado por reforço inicializado (Bandit UCB1)\n");
+    }
+
+    SenseFatigue sense_fatigue;
+    sense_fatigue_init(&sense_fatigue);
+
+    /* ── Fase 6: Biometria de Teclado, Resumo Diário e Telemetria (100% C) ── */
+    SenseKeystrokeBiometrics sense_keystroke;
+    sense_keystroke_init(&sense_keystroke);
+    if (keys_load_state(&sense_keystroke, KEYS_FILE)) {
+        printf("[KEYSTROKE] Biometria do dono carregada: %s (%u amostras de ritmo)\n",
+               KEYS_FILE, sense_keystroke.owner_samples);
+    } else {
+        printf("[KEYSTROKE] Biometria inicializada (Aguardando aprendizado do ritmo de digitação)\n");
+    }
+
+    time_t raw_init_t = time(NULL);
+    struct tm *lt_init = localtime(&raw_init_t);
+    int start_day = lt_init ? lt_init->tm_yday : 0;
+
+    DailySummary daily_summary;
+    daily_summary_init(&daily_summary, start_day);
+
+    TelemetryFifo telemetry_fifo;
+    telemetry_fifo_init(&telemetry_fifo);
 
     /* ── novos subsistemas: biologia, percepção e mente ── */
     SenseMouse              sense_mouse;
@@ -240,6 +582,12 @@ int main(void) {
     AutonomyState autonomy;
     autonomy_init(&autonomy);
 
+    /* ── Rituais de convivência e calibração de maturação ontogenética ── */
+    RitualState rituals;
+    rituals_init(&rituals);
+    voice_synth_set_maturity_stage(&voice, ontogeny.stage);
+    softbody_set_maturity_stage(&sb, ontogeny.stage);
+
     static Canvas canvas;
     int16_t voice_pcm[512];
 
@@ -265,6 +613,7 @@ int main(void) {
     double t_last = now_seconds();
     double sim_t  = 0.0;
     double last_save_t = 0.0;
+    double sleep_accum_s = 0.0;
     uint32_t current_tick = 0;
 
     while (g_running && !window_should_close(win)) {
@@ -303,6 +652,7 @@ int main(void) {
         int pet_cx = pet_x + WINDOW_W / 2;
         int pet_cy = pet_y + WINDOW_H / 2;
         sense_mouse_update(&sense_mouse, cursor_x, cursor_y, pet_cx, pet_cy, 48);
+        sense_fatigue_register_mouse(&sense_fatigue, cursor_x, cursor_y, sim_t);
 
         /* Fix 3: scroll wheel */
         {
@@ -367,6 +717,12 @@ int main(void) {
             drives.affection = (drives.affection < 0.98) ? (drives.affection + 0.005) : 1.0;
             behavior_bond_on_gentle_touch(&bond);
             behavior_dmn_signal_activity(&dmn, t_now);
+
+            event_ring_push(&event_ring, EV_USER_TOUCH, current_tick, sim_t, 1.0f, "caress");
+            daily_summary_record_touch(&daily_summary);
+            if (sim_t - bandit.last_pull_time < 60.0 && bandit.last_arm_chosen >= 0) {
+                bandit_update_reward(&bandit, (BanditArm)bandit.last_arm_chosen, 1.0f);
+            }
         }
 
         /* Reflexo Nociceptivo Espinhal (Sacudida violenta) */
@@ -385,6 +741,12 @@ int main(void) {
             drives.stress = (drives.stress < 0.95) ? (drives.stress + 0.15) : 1.0;
             behavior_bond_on_shake(&bond);
             behavior_dmn_signal_activity(&dmn, t_now);
+
+            event_ring_push(&event_ring, EV_USER_SHAKE, current_tick, sim_t, 1.0f, "shake");
+            daily_summary_record_shake(&daily_summary);
+            if (sim_t - bandit.last_pull_time < 30.0 && bandit.last_arm_chosen >= 0) {
+                bandit_update_reward(&bandit, (BanditArm)bandit.last_arm_chosen, -1.0f);
+            }
         }
 
         /* ── Percepção Avançada: Microfone (Som ambiente / palmas) ── */
@@ -404,10 +766,48 @@ int main(void) {
                           NULL,
 #endif
                           (unsigned long)aw_id);
-        if (sense_text_has_new_word(&sense_text)) {
-            lexicon_observe_word(&lexicon, sense_text_get_last_word(&sense_text),
-                                 fix_from_float((float)emotion.valence),
-                                 fix_from_float((float)emotion.arousal), 1);
+
+        const char *current_win_title = sense_text_get_title(&sense_text);
+        bool is_win_ignored = config_rules_is_ignored(&config_rules, current_win_title);
+
+        if (!is_win_ignored) {
+            if (sense_text_has_new_word(&sense_text)) {
+                lexicon_observe_word(&lexicon, sense_text_get_last_word(&sense_text),
+                                     fix_from_float((float)emotion.valence),
+                                     fix_from_float((float)emotion.arousal), 1);
+            }
+
+            /* Reação a Erros na Tela (Frustração / Alerta) */
+            if (sense_text_has_error(&sense_text)) {
+                neuromod_inject_ne(&neuromod, fix_from_float(0.12f));
+                neuromod_inject_cort(&neuromod, fix_from_float(0.08f));
+                softbody_squish(&sb, 0.35f);
+                if (t_now - voice_last_whine > VOICE_COOLDOWN_WHINE) {
+                    voice_synth_trigger_ex(&voice, VOICE_WHINE_PROTEST, 0.30f, 0.7f);
+                    voice_last_whine = t_now;
+                }
+                workspace_submit_candidate(&workspace, STIMULUS_SURPRISE_MISMATCH, fix_from_float(1.6f), current_tick);
+                drives.stress = (drives.stress < 0.90) ? (drives.stress + 0.10) : 1.0;
+                record_episode_sdm(&sdm_memory, current_win_title, 12, emotion.valence, drives.stress, 3);
+                event_ring_push(&event_ring, EV_CODE_ERROR, current_tick, sim_t, 1.0f, "error");
+                daily_summary_record_code_error(&daily_summary);
+            }
+
+            /* Reação a Sucessos / Build Passed na Tela (Celebração) */
+            if (sense_text_has_success(&sense_text)) {
+                neuromod_inject_da(&neuromod, fix_from_float(0.18f));
+                neuromod_inject_ser(&neuromod, fix_from_float(0.10f));
+                softbody_jiggle(&sb, 0.38f);
+                if (t_now - voice_last_chirp > VOICE_COOLDOWN_CHIRP) {
+                    voice_synth_trigger_ex(&voice, VOICE_CHIRP_HAPPY, 0.25f, 0.85f);
+                    voice_last_chirp = t_now;
+                }
+                drives.affection = (drives.affection < 0.98) ? (drives.affection + 0.02) : 1.0;
+                drives.energy = (drives.energy < 0.95) ? (drives.energy + 0.05) : 1.0;
+                record_episode_sdm(&sdm_memory, current_win_title, 12, emotion.valence, drives.stress, 4);
+                event_ring_push(&event_ring, EV_CODE_SUCCESS, current_tick, sim_t, 1.0f, "success");
+                daily_summary_record_code_success(&daily_summary);
+            }
         }
 
         /* ── Resposta Bifásica Susto → Alívio ── */
@@ -476,6 +876,20 @@ int main(void) {
         while ((key = window_read_char(win)) != 0) {
             sensors_register_key(sensors, key, sim_t);
             behavior_dmn_signal_activity(&dmn, t_now);
+            sense_fatigue_register_key(&sense_fatigue, key, sim_t);
+            event_ring_push(&event_ring, EV_KEYSTROKE, current_tick, sim_t, 1.0f, "key");
+            daily_summary_record_key(&daily_summary);
+            sense_keystroke_press(&sense_keystroke, key, sim_t);
+
+            if (sense_keystroke.owner_learned) {
+                float sim_owner = sense_keystroke.last_similarity;
+                if (sim_owner > 0.85f) {
+                    neuromod_inject_ser(&neuromod, fix_from_float(0.005f));
+                    drives.affection = (drives.affection < 0.99) ? (drives.affection + 0.002) : 1.0;
+                } else if (sim_owner < 0.40f) {
+                    neuromod_inject_ne(&neuromod, fix_from_float(0.01f));
+                }
+            }
 
             switch (key) {
             case KEY_SPACE:
@@ -538,6 +952,120 @@ int main(void) {
         neuromod_step(&neuromod);
         workspace_step(&workspace, current_tick);
 
+        /* ── Ontogenia: Passo de maturação a 1 Hz (a cada 60 frames) ── */
+        if (current_tick % 60 == 0) {
+            fix16_t pool_err[ONTO_POOLS] = {0};
+            fix16_t pool_act[ONTO_POOLS] = {0};
+
+            for (int p = 0; p < ONTO_POOLS; ++p) {
+                double r = brain_pool_rate(brain, p);
+                int act_scaled = (int)(r * (256.0 / 40.0));
+                if (act_scaled > 256) act_scaled = 256;
+                if (act_scaled < 0) act_scaled = 0;
+                pool_act[p] = (fix16_t)act_scaled;
+
+                if (surprise_ne > 0 && p < PESTINHA_CHANNELS) {
+                    pool_err[p] = surprise_ne > 256 ? 256 : surprise_ne;
+                }
+            }
+
+            onto_tick_1hz(&ontogeny, pool_err, pool_act, neuromod.ne);
+
+            /* Curiosidade por Progresso de Compressão (Schmidhuber) */
+            static int prev_mean_err = -1;
+            int sum_err = 0, n_active_pools = 0;
+            for (int p = 0; p < ONTO_POOLS; ++p) {
+                if (ontogeny.pool[p].seen) {
+                    sum_err += (int)ontogeny.pool[p].err_ema;
+                    n_active_pools++;
+                }
+            }
+            if (n_active_pools > 0) {
+                int mean_err = sum_err / n_active_pools;
+                if (prev_mean_err >= 0) {
+                    int delta_err = mean_err - prev_mean_err;
+                    /* Progresso de Compressão: erro diminuindo -> recompensa dopaminérgica */
+                    if (delta_err < -2) {
+                        neuromod_inject_da(&neuromod, fix_from_float(0.04f));
+                        drives.curiosity = (drives.curiosity > 0.05) ? (drives.curiosity - 0.02) : 0.0;
+                    }
+                    /* Tédio sustentado com erro baixo: estimula busca por novidade/exploração */
+                    else if (abs(delta_err) <= 2 && mean_err < 40) {
+                        drives.curiosity = (drives.curiosity < 0.95) ? (drives.curiosity + 0.015) : 1.0;
+                    }
+                }
+                prev_mean_err = mean_err;
+            }
+
+            /* Avaliação das Regras Customizadas (.caddinrc) */
+            time_t raw_t = time(NULL);
+            struct tm *lt = localtime(&raw_t);
+            int cur_hour = lt ? lt->tm_hour : 12;
+
+            RuleContext rule_ctx = {
+                .neuromod = &neuromod,
+                .sb = &sb,
+                .voice = &voice,
+                .drives = &drives,
+                .now_s = sim_t
+            };
+            config_rules_evaluate(&config_rules, current_win_title, cur_hour, sim_t, handle_rule_action, &rule_ctx);
+
+            /* Gravação periódica de memória episódica na SDM a cada 30 segundos */
+            if (current_tick % 1800 == 0) {
+                record_episode_sdm(&sdm_memory, current_win_title, cur_hour, emotion.valence, drives.stress, 0);
+            }
+
+            /* Sincroniza maturação ontogenética com voz e corpo mole */
+            voice_synth_set_maturity_stage(&voice, ontogeny.stage);
+            softbody_set_maturity_stage(&sb, ontogeny.stage);
+
+            /* Verificação de Marcos de Tempo Juntos e Rituais Circadianos */
+            MainRitualContext ritual_ctx = {
+                .voice = &voice,
+                .sb = &sb,
+                .neuromod = &neuromod,
+                .drives = &drives,
+                .now_s = sim_t
+            };
+            int cur_day = lt ? lt->tm_yday : 0;
+            rituals_check_milestones(&rituals, ontogeny.awake_s, on_milestone_reached, &ritual_ctx);
+            rituals_check_circadian(&rituals, cur_hour, cur_day, on_circadian_greeting, &ritual_ctx);
+
+            /* Avaliação do Modelo de Fadiga e Intervenção pelo Bandit UCB1 */
+            daily_summary_tick_1hz(&daily_summary, cur_day, behavior.asleep, (float)emotion.valence);
+            sense_fatigue_update(&sense_fatigue, 1.0, sim_t);
+            static double last_intervention_t = -1000.0;
+            if (sense_fatigue_is_exhausted(&sense_fatigue) && (sim_t - last_intervention_t > 300.0)) {
+                BanditArm arm = bandit_select_action(&bandit, sim_t);
+                last_intervention_t = sim_t;
+                event_ring_push(&event_ring, EV_INTERVENTION, current_tick, sim_t, (float)arm, "exhaustion_intervention");
+                daily_summary_record_intervention(&daily_summary);
+
+                switch (arm) {
+                case ARM_SILENT:
+                    softbody_squish(&sb, 0.15f);
+                    break;
+                case ARM_SUGGEST_PAUSE:
+                    voice_synth_trigger_ex(&voice, VOICE_PURR_DEEP, 0.45f, 0.7f);
+                    softbody_squish(&sb, 0.35f);
+                    break;
+                case ARM_CHEER_PLAY:
+                    voice_synth_trigger_ex(&voice, VOICE_CHIRP_HAPPY, 0.30f, 0.85f);
+                    window_apply_impulse(win, 0.0, -280.0);
+                    softbody_stretch(&sb, 0.25f);
+                    break;
+                case ARM_STRETCH_WATER:
+                    voice_synth_trigger_ex(&voice, VOICE_TRILL, 0.35f, 0.75f);
+                    softbody_stretch(&sb, 0.40f);
+                    softbody_jiggle(&sb, 0.25f);
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
         /* ══════════════════════════════════════════════════
          * CAMADA 3: Neuromodulação Endógena + STDP
          * ══════════════════════════════════════════════════ */
@@ -547,7 +1075,10 @@ int main(void) {
         if (reward_factor > 1.5) reward_factor = 1.5;
         if (reward_factor < -1.5) reward_factor = -1.5;
 
-        brain_learn_stdp(brain, reward_factor, dt);
+        /* Modulação do aprendizado STDP pela Ontogenia (janela crítica) */
+        fix16_t onto_scale = onto_lr_scale(&ontogeny, 0);
+        double onto_mod = (double)onto_scale / 256.0;
+        brain_learn_stdp(brain, reward_factor * onto_mod, dt);
 
         if (inputs[22] > 0.3) {
             conditioning_reward(&cond, inputs[22] * 0.3 * dt);
@@ -570,6 +1101,16 @@ int main(void) {
         /* Consolidação durante o sono */
         if (behavior.asleep) {
             lexicon_consolidate_sleep(&lexicon);
+            sleep_accum_s += dt;
+            if (sleep_accum_s >= 60.0) {
+                onto_sleep_consolidate(&ontogeny);
+                imprint_sleep(&imprint);
+                sdm_consolidate_sleep(&sdm_memory);
+                sense_keystroke_consolidate_imprint(&sense_keystroke);
+                sleep_accum_s = 0.0;
+            }
+        } else {
+            sleep_accum_s = 0.0;
         }
 
         /* Efeitos soft-body e voz procedurais */
@@ -599,6 +1140,10 @@ int main(void) {
         }
         if (m_dance > 0.35) {
             softbody_jiggle(&sb, (float)(m_dance * 0.10));
+        }
+        if (m_chirp > 0.35 && (t_now - voice_last_chirp > VOICE_COOLDOWN_CHIRP)) {
+            voice_synth_trigger_ex(&voice, VOICE_CHIRP_HAPPY, 0.20f, 0.7f);
+            voice_last_chirp = t_now;
         }
 
         /* ── Emoções Reativas ── */
@@ -748,9 +1293,37 @@ int main(void) {
         face_draw_squishy(canvas, &anim.current, anim.bob_y, anim.blink_lid, &sb, &em);
         window_present(win, canvas);
 
-        /* ── Auto-save periódico dos pesos sinápticos ── */
+        /* ── Transmissão de Telemetria via FIFO (10 Hz, 100% C Puro) ── */
+        if (current_tick % 6 == 0) {
+            CaddinTelemetryFrame tframe;
+            memset(&tframe, 0, sizeof(tframe));
+            tframe.magic = TELEMETRY_MAGIC;
+            tframe.tick = current_tick;
+            tframe.timestamp_s = sim_t;
+            tframe.da = fix_to_float(neuromod.da);
+            tframe.ne = fix_to_float(neuromod.ne);
+            tframe.ser = fix_to_float(neuromod.ser);
+            tframe.cort = fix_to_float(neuromod.cort);
+            tframe.onto_stage = (uint8_t)ontogeny.stage;
+            tframe.onto_brake_mean = (float)onto_mean_brake(&ontogeny) / 65535.0f;
+            tframe.fatigue = sense_fatigue_get_level(&sense_fatigue);
+            tframe.bandit_arm = (uint8_t)(bandit.last_arm_chosen >= 0 ? bandit.last_arm_chosen : 0);
+            tframe.valence = (float)emotion.valence;
+            tframe.arousal = (float)emotion.arousal;
+            for (int p = 0; p < 120; ++p) {
+                double r = brain_pool_rate(brain, p);
+                tframe.pool_activity[p] = (uint8_t)(r > 1.0 ? 255 : (r < 0.0 ? 0 : (r * 255.0)));
+            }
+            telemetry_fifo_send(&telemetry_fifo, &tframe);
+        }
+
+        /* ── Auto-save periódico dos pesos sinápticos e ontogenia ── */
         if (sim_t - last_save_t > AUTOSAVE_INTERVAL) {
             brain_save(brain, BRAIN_FILE);
+            onto_save_state(&ontogeny, &imprint, ONTO_FILE);
+            sdm_save_state(&sdm_memory, SDM_FILE);
+            bandit_save_state(&bandit, BANDIT_FILE);
+            keys_save_state(&sense_keystroke, KEYS_FILE);
             last_save_t = sim_t;
         }
 
@@ -759,9 +1332,28 @@ int main(void) {
             sleep_ms((int)((TARGET_DT - elapsed) * 1000.0));
     }
 
-    /* ── Salva pesos sinápticos ao encerrar ── */
+    /* ── Salva pesos sinápticos e ontogenia ao encerrar ── */
     brain_save(brain, BRAIN_FILE);
+    onto_save_state(&ontogeny, &imprint, ONTO_FILE);
+    sdm_save_state(&sdm_memory, SDM_FILE);
+    bandit_save_state(&bandit, BANDIT_FILE);
+    keys_save_state(&sense_keystroke, KEYS_FILE);
+    daily_summary_append_file(&daily_summary, DAILY_LOG);
+
     printf("[SNN] Memória sináptica salva: %s\n", BRAIN_FILE);
+    printf("[ONTO] Estado ontogenético salvo: %s (Estágio: %d, Vigília: %us, Ciclos sono: %u)\n",
+           ONTO_FILE, ontogeny.stage, ontogeny.awake_s, ontogeny.sleeps);
+    printf("[SDM] Memória episódica salva: %s\n", SDM_FILE);
+    printf("[BANDIT] Modelo de intervenção salvo: %s\n", BANDIT_FILE);
+    printf("[KEYSTROKE] Biometria salva: %s\n", KEYS_FILE);
+
+    /* Imprime o Resumo Diário na saída padrão */
+    char daily_buf[1024];
+    if (daily_summary_format(&daily_summary, daily_buf, sizeof(daily_buf)) > 0) {
+        printf("\n%s\n", daily_buf);
+    }
+
+    telemetry_fifo_close(&telemetry_fifo);
 
     sensors_close(sensors);
     brain_destroy(brain);

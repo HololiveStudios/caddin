@@ -70,6 +70,9 @@ typedef struct {
     /* Intensidade emocional 0..1 (modula volume, vibrato, profundidade) */
     float     intensity;
 
+    /* Escala ontogenética de pitch (1.35 filhote -> 0.88 veterano) */
+    float     pitch_scale;
+
     /* Fase do envelope de respiração (para purr inhale/exhale) */
     float     breath_phase;
 } VoiceSynth;
@@ -78,6 +81,9 @@ typedef struct {
  * API pública
  * --------------------------------------------------------------------------- */
 void   voice_synth_init(VoiceSynth *vs, uint32_t sample_rate);
+
+/* Ajusta o pitch de maturação ontogenética (0=filhote, 1=juvenil, 2=adulto, 3=veterano) */
+void   voice_synth_set_maturity_stage(VoiceSynth *vs, int stage);
 
 /* Trigger simples (compatibilidade) */
 void   voice_synth_trigger(VoiceSynth *vs, VoiceType type, float duration_sec);
