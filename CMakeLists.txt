@@ -18,15 +18,16 @@ if(WIN32)
         m
     )
 elseif(CADDIN_ANDROID_APP)
-    message(STATUS "[PLATFORM] Compilando APK Nativo Android (ANativeWindow)")
+    message(STATUS "[PLATFORM] Compilando APK Nativo Android (ANativeWindow + JNI Overlay)")
     add_compile_definitions(ANDROID_APP CADDIN_HEADLESS WITHOUT_ALSA)
     set(PLATFORM_SRCS
         src/platform/window_android.c
         src/platform/android_main.c
+        src/platform/android_overlay_bridge.c
         ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c
     )
     include_directories(${ANDROID_NDK}/sources/android/native_app_glue)
-    set(PLATFORM_LIBS m log android)
+    set(PLATFORM_LIBS m log android jnigraphics)
 elseif(CADDIN_HEADLESS)
     # Modo headless: sem X11, sem ALSA — para Android/Termux/ADB
     message(STATUS "[PLATFORM] Modo HEADLESS — sem X11/ALSA")

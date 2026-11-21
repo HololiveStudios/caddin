@@ -35,16 +35,22 @@ apk:
 		-DCADDIN_ANDROID_APP=ON
 	@cmake --build build-apk --target caddin
 	@/home/carlos/android-tools/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip build-apk/libcaddin.so 2>/dev/null || true
+	@rm -rf build-dex && mkdir -p build-dex
+	@javac -source 11 -target 11 -cp /home/carlos/android-tools/android-34.jar \
+		-d build-dex src/platform/android/src/org/hololive/caddin/*.java
+	@/home/carlos/android-tools/sdk/build-tools/34.0.0/d8 --lib /home/carlos/android-tools/android-34.jar \
+		--output build-dex/ build-dex/org/hololive/caddin/*.class
 	@mkdir -p android_apk/res/values android_apk/lib/arm64-v8a dist
 	@cp build-apk/libcaddin.so android_apk/lib/arm64-v8a/libcaddin.so
+	@cp build-dex/classes.dex android_apk/
 	@rm -f android_apk/caddin-unaligned.apk dist/caddin-v1.4.0.apk
 	@aapt package -f -M android_apk/AndroidManifest.xml -S android_apk/res \
 		-I /home/carlos/android-tools/android-34.jar -F android_apk/caddin-unaligned.apk
-	@cd android_apk && aapt add caddin-unaligned.apk lib/arm64-v8a/libcaddin.so
+	@cd android_apk && aapt add caddin-unaligned.apk classes.dex lib/arm64-v8a/libcaddin.so
 	@zipalign -f -p 4 android_apk/caddin-unaligned.apk dist/caddin-v1.4.0.apk
 	@apksigner sign --ks /home/carlos/android-tools/debug.keystore --ks-pass pass:android \
 		--ks-key-alias androiddebugkey --key-pass pass:android dist/caddin-v1.4.0.apk
-	@echo "[APK] APK nativo com tela gerado e assinado: dist/caddin-v1.4.0.apk"
+	@echo "[APK] APK com overlay flutuante gerado com sucesso: dist/caddin-v1.4.0.apk"
 
 dist: all windows
 	@rm -rf dist
