@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__linux__) && !defined(_WIN32)
+#if defined(__linux__) && !defined(_WIN32) && !defined(CADDIN_HEADLESS)
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>

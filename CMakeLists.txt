@@ -3,6 +3,8 @@ project(caddin C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+option(CADDIN_HEADLESS "Build headless (sem X11/display) para Android/CLI" OFF)
+
 if(WIN32)
     set(PLATFORM_SRCS
         src/platform/window_win32.c
@@ -15,6 +17,29 @@ if(WIN32)
         winmm
         m
     )
+elseif(CADDIN_ANDROID_APP)
+    message(STATUS "[PLATFORM] Compilando APK Nativo Android (ANativeWindow)")
+    add_compile_definitions(ANDROID_APP CADDIN_HEADLESS WITHOUT_ALSA)
+    set(PLATFORM_SRCS
+        src/platform/window_android.c
+        src/platform/android_main.c
+        ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c
+    )
+    include_directories(${ANDROID_NDK}/sources/android/native_app_glue)
+    set(PLATFORM_LIBS m log android)
+elseif(CADDIN_HEADLESS)
+    # Modo headless: sem X11, sem ALSA — para Android/Termux/ADB
+    message(STATUS "[PLATFORM] Modo HEADLESS — sem X11/ALSA")
+    add_compile_definitions(CADDIN_HEADLESS WITHOUT_ALSA)
+    set(PLATFORM_SRCS
+        src/platform/window_headless.c
+    )
+    if(ANDROID)
+        # No Android (Bionic libc), pthread e dl já fazem parte da libc básica
+        set(PLATFORM_LIBS m log)
+    else()
+        set(PLATFORM_LIBS m pthread)
+    endif()
 else()
     find_package(X11 REQUIRED)
     # Detecta ALSA no Linux
@@ -97,7 +122,11 @@ set(SRCS
     sensors.c
 )
 
-add_executable(caddin ${SRCS})
+if(CADDIN_ANDROID_APP)
+    add_library(caddin SHARED ${SRCS})
+else()
+    add_executable(caddin ${SRCS})
+endif()
 
 target_include_directories(caddin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -113,7 +142,7 @@ target_include_directories(caddin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/behavior
 )
 
-if(NOT WIN32)
+if(NOT WIN32 AND NOT CADDIN_HEADLESS)
     target_include_directories(caddin PRIVATE ${X11_INCLUDE_DIR})
 endif()
 

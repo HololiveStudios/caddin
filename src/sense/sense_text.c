@@ -3,7 +3,7 @@
 #include <ctype.h>
 #include <stdio.h>
 
-#if defined(__linux__)
+#if defined(__linux__) && !defined(CADDIN_HEADLESS)
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #elif defined(_WIN32)
@@ -39,7 +39,7 @@ void sense_text_update(SenseText *st, float dt, void *native_display, unsigned l
 
     char new_title[SENSE_TEXT_MAX_LEN] = {0};
 
-#if defined(__linux__)
+#if defined(__linux__) && !defined(CADDIN_HEADLESS)
     Display *dpy = (Display *)native_display;
     if (dpy && active_window != 0) {
         Atom prop = XInternAtom(dpy, "_NET_WM_NAME", True);

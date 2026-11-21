@@ -23,7 +23,7 @@ static int  g_rate = 16000;
 /* ═══════════════════════════════════════════════════════════
  * IMPLEMENTAÇÃO LINUX (ALSA)
  * ═══════════════════════════════════════════════════════════ */
-#if defined(__linux__) && !defined(_WIN32)
+#if defined(__linux__) && !defined(_WIN32) && !defined(CADDIN_HEADLESS)
 
 #include <alsa/asoundlib.h>
 #include <alloca.h>

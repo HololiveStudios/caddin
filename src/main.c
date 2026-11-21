@@ -68,7 +68,7 @@
 #  include <malloc.h>
 #endif
 
-#if defined(__linux__) && !defined(_WIN32)
+#if defined(__linux__) && !defined(_WIN32) && !defined(CADDIN_HEADLESS)
 extern void *x11_get_display(void);
 #endif
 
@@ -388,7 +388,12 @@ enum {
     M_NOD_HEAD, M_SHAKE_HEAD, M_THINK_EMIT, M_TAIL_WAG
 };
 
+#ifdef ANDROID_APP
+int caddin_app_main(int argc, char **argv) {
+    (void)argc; (void)argv;
+#else
 int main(void) {
+#endif
 #if defined(__linux__) && defined(__GLIBC__)
     mallopt(M_TRIM_THRESHOLD, 64 * 1024);
     mallopt(M_MMAP_THRESHOLD, 64 * 1024);
@@ -541,7 +546,7 @@ int main(void) {
 
     /* ── Luma precisa de Display*, criado dinamicamente ── */
     SenseLuma *sense_luma = NULL;
-#if defined(__linux__) && !defined(_WIN32)
+#if defined(__linux__) && !defined(_WIN32) && !defined(CADDIN_HEADLESS)
     {
         /* Inclui X11 apenas no bloco guardado — evita exposição do tipo Display
          * ao compilador do main.c que não inclui Xlib diretamente */
@@ -639,10 +644,12 @@ int main(void) {
         window_get_pos(win, &pet_x, &pet_y);
 
         int cursor_x = 0, cursor_y = 0;
+#if defined(__linux__) && !defined(_WIN32) && !defined(CADDIN_HEADLESS)
         {
             extern bool x11_get_screen_cursor(int *out_x, int *out_y);
             x11_get_screen_cursor(&cursor_x, &cursor_y);
         }
+#endif
 
         /* ══════════════════════════════════════════════════
          * CAMADA 1: Percepção SO Avançada & Sensores
@@ -760,7 +767,7 @@ int main(void) {
 
         /* ── Percepção Avançada: Leitura de Texto Contextual da Janela Ativa ── */
         sense_text_update(&sense_text, (float)dt,
-#if defined(__linux__) && !defined(_WIN32)
+#if defined(__linux__) && !defined(_WIN32) && !defined(CADDIN_HEADLESS)
                           x11_get_display(),
 #else
                           NULL,

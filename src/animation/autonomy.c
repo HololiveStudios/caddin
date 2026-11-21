@@ -1,5 +1,7 @@
 #include "autonomy.h"
-#include "x11_cursor.h"
+#ifndef CADDIN_HEADLESS
+#  include "x11_cursor.h"
+#endif
 #include "config.h"
 #include "neuro.h"
 #include <math.h>
@@ -35,7 +37,11 @@ void autonomy_update(AutonomyState *au, double dt, PetWindow *win,
 
     /* ── 1. Rastreia o ponteiro do usuário na tela (Vendo o que você faz) ── */
     int scr_mx = 0, scr_my = 0;
+#ifdef CADDIN_HEADLESS
+    bool has_cursor = false;
+#else
     bool has_cursor = x11_get_screen_cursor(&scr_mx, &scr_my);
+#endif
 
     int win_x = 0, win_y = 0;
     window_get_pos(win, &win_x, &win_y);
