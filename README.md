@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 Carmin — Organismo Digital Autônomo v1.5.0
+# 🧠 Carmin — Organismo Digital Autônomo v1.6.0
 <sub>Repositório e executáveis ainda preservam o nome histórico Caddin.</sub>
 ### Runtime C11 com rede LIF configurada para 1.048.576 unidades, 120 grupos, conectividade CSR limitada, sensores de desktop, SDM e ontogenia
 
@@ -8,7 +8,7 @@
 [![Escala configurada](https://img.shields.io/badge/Unidades-1.048.576-brightgreen.svg)](#)
 [![Conectividade](https://img.shields.io/badge/CSR-máximo%2064%20saídas%2Funidade-orange.svg)](#)
 [![Aritmética](https://img.shields.io/badge/Aritmética-Ponto%20Fixo%20Q8.8%20%2F%20Q0.32-purple.svg)](#)
-[![Validação](https://img.shields.io/badge/Tempo%20real-não%20medido-lightgrey.svg)](#)
+[![Validação](https://img.shields.io/badge/Ciclo%2016ms-4.70ms%20médio%20%2F%2026.37ms%20alto-orange.svg)](docs/carmin/BASELINE.md)
 [![Plataformas](https://img.shields.io/badge/Plataformas-Linux%20(X11%20%2B%20ALSA)%20%7C%20Windows%20(GDI%20%2B%20WinMM)-blueviolet.svg)](#)
 [![Licença](https://img.shields.io/badge/Licença-MIT%20Open%20Experimental-lightgrey.svg)](#)
 
@@ -20,7 +20,7 @@
 
 **Carmin** é a identidade do produto em evolução deste repositório Caddin. O runtime atual combina sensores do desktop, um modelo LIF e camadas de memória, ontogenia, homeostase e comportamento, com backends Linux/X11 e Windows. A SNN ativa está configurada para **1.048.576 unidades em 120 grupos**: 262.144 sensoriais, 589.824 associativas e 196.608 motoras. A conectividade é montada diretamente em CSR, com no máximo 64 conexões de saída por unidade.
 
-Esse total descreve unidades com estado alocado e IDs em pools; **não é uma alegação de 60 FPS ou tempo real**. O passo neural ainda percorre densamente 262.144 unidades sensoriais e 786.432 unidades associativas/motoras por milissegundo simulado. RSS, CPU, latência, qualidade comportamental e escala ainda precisam ser medidos. A reserva máxima de conectividade pelo teto seria ~67,1 milhões de sinapses; a quantidade construída depende das projeções amostradas.
+Esse total descreve unidades com estado alocado e IDs em pools; **não é uma alegação de 60 FPS ou tempo real geral**. O kernel neural integra por eventos e avança células silenciosas de forma lazy. Num benchmark fixo neste host, o ciclo de estímulo + `brain_step(16 ms)` + STDP levou 4,70 ms em carga média e 26,37 ms em carga alta; a referência densa levou 51,13 ms e 66,17 ms, respectivamente. O processo event-driven atingiu pico entre 520 e 540 MiB de RSS. A carga alta excede o orçamento de 16 ms; os resultados de escala, hashes de estado e detalhes do método estão em [baseline](docs/carmin/BASELINE.md) e [curva 2k–1M](docs/carmin/CURVA_ESCALA.md). Validação comportamental, latência da aplicação completa e segundo hardware continuam pendentes. A reserva máxima de conectividade pelo teto seria 67.108.864 sinapses; esta topologia construiu 52.166.656.
 
 O caminho ativo usa C11, CSR e vetores de estado no heap. A política atual continua centrada no organismo virtual e nos comportamentos já presentes. Controle geral de mouse/teclado, leitura/escrita arbitrária de arquivos, comandos do shell e ponte com LLM local são objetivos em planejamento, não capacidades que este release declara como prontas.
 
@@ -43,12 +43,13 @@ O caminho ativo usa C11, CSR e vetores de estado no heap. A política atual cont
 13. [Monitor de Telemetria e Spikes em Terminal ANSI em 100% C](#-monitor-de-telemetria-e-spikes-em-terminal-ansi)
 14. [Motor de Regras Customizáveis (.caddinrc)](#-motor-de-regras-customizáveis-caddinrc)
 15. [Persistência Atômica v2 com Integridade CRC32](#-persistência-atômica-v2-com-integridade-crc32)
-16. [Estrutura de Diretórios do Projeto](#-estrutura-de-diretórios-do-projeto)
-17. [Histórico de Versões e Evolução](#-histórico-de-versões-e-evolução)
-18. [Guia de Compilação, Cross-Compile e Deploy](#-guia-de-compilação-cross-compile-e-deploy)
-19. [Suíte de Testes Automatizada](#-suíte-de-testes-automatizada)
-20. [Controles, Interações e Atalhos](#-controles-interações-e-atalhos)
-21. [Licença](#-licença)
+16. [Evolução Carmin: eventos, segurança e validação](#-evolução-carmin-eventos-segurança-e-validação)
+17. [Estrutura de Diretórios do Projeto](#-estrutura-de-diretórios-do-projeto)
+18. [Histórico de Versões e Evolução](#-histórico-de-versões-e-evolução)
+19. [Guia de Compilação, Cross-Compile e Deploy](#-guia-de-compilação-cross-compile-e-deploy)
+20. [Suíte de Testes Automatizada](#-suíte-de-testes-automatizada)
+21. [Controles, Interações e Atalhos](#-controles-interações-e-atalhos)
+22. [Licença](#-licença)
 
 ---
 
@@ -154,7 +155,7 @@ flowchart TD
 
 ## 🧠 Cérebro SNN de 1.048.576 Unidades e Topologia Neural
 
-A rede usa neurônios **LIF (Leaky Integrate-and-Fire)** e sinapses esparsas em formato **CSR (Compressed Sparse Row)**. O runtime ainda atualiza estados em loops densos; não há medição que confirme 60 FPS nesta escala:
+A rede usa neurônios **LIF (Leaky Integrate-and-Fire)** e sinapses esparsas em formato **CSR (Compressed Sparse Row)**. O kernel por eventos integra somente alvos ativados e avança estados silenciosos quando voltam a receber entrada. A comparação com integração densa mostrou taxas observáveis iguais nos cenários fixos médio e alto; equivalência para outros estados e entradas ainda está em validação. Não há confirmação de 60 FPS nesta escala:
 
 ### 1. Grupos sensoriais (64 × 4.096 = 262.144 unidades)
 Os 64 canais e suas populações-base estão em [`runtime_types.h`](runtime_types.h), [`network_data.h`](network_data.h) e no [inventário detalhado](docs/carmin/INVENTARIO_GRUPOS.md). Incluem digitação, interação, contexto temporal, sinais de sistema, temperatura, presença, biometria e sinais homeostáticos. As fontes disponíveis variam por plataforma; seis canais ainda não têm produtor confiável conectado.
@@ -167,7 +168,7 @@ Pools de associação, memória de trabalho, estados afetivos, foco e controle. 
 - **Atuação Vocal:** `M_CHIRP_SOUND`, `M_BEEP_PULSE`, `M_PURR_EFFECT`, `M_ALERT_EMIT`, `M_THINK_EMIT`.
 - **Ações e comportamento existentes:** expressão, vocalização, sono, alimentação e movimentos do organismo virtual. Controle arbitrário de mouse/teclado e operações de arquivos/shell não fazem parte do runtime liberado.
 
-A lista completa de nomes, parâmetros, IDs e projeções está em [`docs/carmin/INVENTARIO_GRUPOS.md`](docs/carmin/INVENTARIO_GRUPOS.md). A proposta de reorganizar os 120 grupos para visão ampliada, planejamento desktop e ferramentas/LLM está em planejamento; não é uma capacidade deste release.
+A lista ativa de nomes, parâmetros, IDs, produtores e consumidores está em [`docs/carmin/INVENTARIO_GRUPOS.md`](docs/carmin/INVENTARIO_GRUPOS.md). O [mapa-alvo dos 120 grupos desktop](docs/carmin/MAPA_GRUPOS_DESKTOP.md) está especificado, mas ainda não foi ativado no runtime e não é uma capacidade deste release. Cada região possui estado LIF individual e a topologia a 1M foi construída com 52.166.656 sinapses observadas; o perfil desktop não aumenta nem substitui ainda as 1.048.576 unidades.
 
 ### 4. Neuromoduladores Biológicos
 - **Dopamina (DA):** Sinal de recompensa, novidade e incentivo à exploração.
@@ -345,17 +346,31 @@ cooldown = 30.0
 
 ## 🛡️ Persistência Atômica v2 com Integridade CRC32
 
-Todas as memórias do pet são salvas sem risco de corrupção:
+Os snapshots usam gravação temporária e verificação de integridade; corrupção ou interrupção pode ser detectada, mas isso não equivale a rollback A/B de todos os arquivos:
 - `caddin.brain`: Pesos sinápticos e topologia da rede SNN.
 - `caddin.onto`: Estado ontogenético, estágios de vida e imprinting acústico.
 - `caddin.sdm`: Memória episódica hiperdimensional distribuída.
 - `caddin.bandit`: Modelo de aprendizado por reforço UCB1 de intervenções de fadiga.
 - `caddin.keys`: Perfil biométrico de ritmo de digitação do dono.
+- `caddin.episodes`: Índice episódico experimental de até 256 registros, schema/CRC; atualmente carrega/salva sem ingestão do loop cotidiano.
 - `caddin_daily.log`: Histórico diário de convivência e foco.
 
-Cada arquivo utiliza cabeçalho com Magic Number (`CADD`), contagem de versão, timestamp e checksum **CRC32 (IEEE 802.3)**, gravados através de escrita atômica em arquivo temporário seguida de substituição atômica (`rename()` no POSIX / `MoveFileExA` no Windows).
+O formato cerebral e várias memórias usam cabeçalho `CADD`, versão, timestamp e CRC32 (IEEE 802.3). A SDM usa formato próprio SDM2 versionado com CRC32, endereços, geometria e contadores, pois SDM1 não guardava endereços. A migração SDM1 inicializa memória episódica vazia para não associar dados a localizações erradas. Não existe ainda checkpoint transacional conjunto nem recuperação A/B de múltiplos arquivos.
 
 ---
+
+## 🧭 Evolução Carmin: eventos, segurança e validação
+
+O estágio atual do plano M0–M6 e as decisões técnicas estão resumidos em [`CADDIN_EVOLUTION.md`](CADDIN_EVOLUTION.md), com documentos específicos em [`docs/carmin/`](docs/carmin/).
+
+- A distribuição configurada permanece em **1.048.576 unidades**: sensoriais 262.144, associativas 589.824, motoras 196.608; 120 grupos. Benchmark de 1M, pico RSS, cenários e limites de carga alta estão no [baseline](docs/carmin/BASELINE.md).
+- `CarminEvent` v1 transporta somente valores escalares com sequência, timestamp, origem e flags de privacidade. O lote síncrono alimenta o cérebro; ainda não grava/reproduz eventos reais do SO.
+- A SDM usa formato persistido **SDM2**, com versão, geometria, endereços determinísticos, contadores e CRC32. A distribuição ativa é 128 localizações × 2.048 bits, k=8; não são as 65.536 localizações do blueprint. O formato legado SDM1 não continha endereços, por isso o carregador reinicializa estado vazio determinístico ao migrá-lo.
+- [`ActuatorGuard`](docs/carmin/ACTUATOR_GUARD.md) tem modos Shadow/Assisted/Autonomous, mas nenhum executor/UI está conectado. [`CarminAsyncQueue`](docs/carmin/CONTRATO_EVENTOS.md) oferece capacidade 16, payload máximo 256 bytes, deadline, cancelamento e retorno estruturado, sem worker LLM integrado.
+- [`CarminTelemetrySnapshot`](docs/carmin/CONTRATO_EVENTOS.md) registra localmente contadores, taxas dos 120 pools e fingerprint do mapa a 1 Hz; o snapshot ainda não é publicado para monitor externo.
+- `caddin.episodes` é o arquivo separado para o índice episódico experimental (até 256 registros, schema/CRC); o loop atual carrega e salva, mas ainda não ensina episódios reais a partir de tela, ferramentas ou decisões.
+- O benchmark SDM e a simulação temporal são reproduzíveis em [`SDM_BENCHMARK.md`](docs/carmin/SDM_BENCHMARK.md) e [`SIMULACAO.md`](docs/carmin/SIMULACAO.md). A simulação inicial foi 96,53% numa única seed e não demonstra generalização.
+- M0–M5 continuam parciais; M6 depende de hardware adicional e validação funcional. Os principais pendentes são segunda arquitetura, replay real redigido, UI/executor protegido, worker/LLM, telemetria publicada, testes multiseed, instrumentação de FPS integrado, rollback A/B e validação dos grupos desktop antes de substituir IDs legados.
 
 ## 📁 Estrutura de Diretórios do Projeto
 
@@ -383,14 +398,17 @@ caddin/
 │   ├── body/                 # audio_out, palette, voice_synth
 │   ├── core/                 # arena, bandit, config_rules, cpg, daily_summary, event_ring,
 │   │                         # fixed, neuromod, ontogeny, persist, predict, rituals, rng,
-│   │                         # sdm, snn, telemetry_fifo
+│   │                         # sdm, snn, telemetry_fifo, cognitive_event, actuator_guard,
+│   │                         # async_request, carmin_snapshot
 │   ├── lang/                 # lexicon
 │   ├── mind/                 # workspace
 │   ├── platform/             # window.h, window_win32, window_x11, x11_cursor
 │   ├── renderer/             # face, pixel_draw
 │   └── sense/                # fatigue, heatmap, keystroke_biometrics, luma, mic, mouse,
 │                             # music, scroll, sysload, text, windows
-├── tests/                    # 13 suítes completas de testes unitários automatizados
+├── bench/                    # benchmarks neurais e simulações reproduzíveis
+├── docs/carmin/              # arquitetura, planos, baselines e resultados
+├── tests/                    # testes unitários focados
 └── tools/
     └── caddin_monitor.c      # Monitor de telemetria em terminal ANSI 100% C
 ```
@@ -401,7 +419,8 @@ caddin/
 
 | Versão | Unidades configuradas | Arquitetura | Destaque |
 |---|---:|---|---|
-| **v1.5.0 (Carmin)** | **1.048.576** (262.144 + 589.824 + 196.608) | CSR limitado a 64 saídas/unidade; estados no heap | Escala 512 nos 120 grupos; build Linux/Windows; performance ainda não medida |
+| **v1.6.0 (Carmin)** | **1.048.576** | Kernel event-driven; eventos tipados; SDM2 com CRC32; Guard e fila assíncrona isolados | 1M com baseline em 2k–1M; simulação SDM; snapshot read-only; sem executor geral de desktop ou LLM ligado |
+| **v1.5.0** | **1.048.576** (262.144 + 589.824 + 196.608) | CSR limitado a 64 saídas/unidade; estados no heap | Escala 512 nos 120 grupos; primeiro release da escala de 1M |
 | **v1.4.0** | 2048 (512 + 1152 + 384) | Ontogenia biológica, SDM 2048b, UCB1, Biometria, Telemetria | Estágios de maturação, Kanerva SDM, curiosidade Schmidhuber, Bandit UCB1, fadiga, rituais, biometria IKD, monitor ANSI em C puro |
 | **v1.2.0** | 2048 (512 + 1152 + 384) | SNN escalonada, persistência v2 CRC32, multimodal | Hide/hunt, perch, susto→alívio, microfone e leitura de texto |
 | **v1.1.6** | 1024 (256 + 768) | SNN LIF com CSR escalável a 2048+ | 11 vozes emocionais, `voice_synth_trigger_ex()`, mapeamento por `state_timer` |
@@ -414,11 +433,22 @@ caddin/
 
 ## 🛠️ Guia de Compilação, Cross-Compile e Deploy
 
+Release v1.6.0: otimização event-driven e contratos de eventos, segurança, fila assíncrona e memória episódica versionada. Para compilar os novos harnesses sem incluí-los no alvo padrão:
+
+```bash
+cmake -S . -B /tmp/carmin-build -DCMAKE_BUILD_TYPE=Release -DCADDIN_HEADLESS=ON
+cmake --build /tmp/carmin-build --target bench_sdm_association simulate_association -j2
+/tmp/carmin-build/bench_sdm_association 4
+/tmp/carmin-build/simulate_association
+```
+
+Os harnesses são sintéticos; nenhum usa nem grava conteúdo real da tela ou teclado.
+
 ### Gerar pacotes de distribuição Linux e Windows
 ```bash
-make dist VERSION=1.5.0
-# dist/carmin-v1.5.0-linux-x86_64.tar.gz
-# dist/carmin-v1.5.0-windows-x86_64.zip
+make dist VERSION=1.6.0
+# dist/carmin-v1.6.0-linux-x86_64.tar.gz
+# dist/carmin-v1.6.0-windows-x86_64.zip
 ```
 O alvo `dist` preserva outros arquivos existentes em `dist/`, como APKs.
 
@@ -439,32 +469,9 @@ make windows
 
 ---
 
-## 🧪 Suíte de Testes Automatizada
+## 🧪 Testes automatizados
 
-O projeto possui alvos de teste headless em CMake. Execute `make test` para rodá-los. O resultado abaixo é histórico da versão v1.4.0 e não foi revalidado para a nova escala:
-
-```bash
-cd build && ctest --output-on-failure
-```
-
-```
-Test project /home/carlos/Antigravity/caddin/build
-      Start  1: CoreTest .........................   Passed    (0.04 sec)
-      Start  2: SnnTest ..........................   Passed    (0.34 sec)
-      Start  3: BiologyTest ......................   Passed    (0.00 sec)
-      Start  4: SensorsTest ......................   Passed    (0.01 sec)
-      Start  5: BodyTest .........................   Passed    (0.01 sec)
-      Start  6: MindLangTest .....................   Passed    (0.01 sec)
-      Start  7: NewModulesTest ...................   Passed    (0.04 sec)
-      Start  8: OntogenyTest .....................   Passed    (0.05 sec) [3.877 verificações]
-      Start  9: ConfigRulesTest ..................   Passed    (0.01 sec)
-      Start 10: SdmTest ..........................   Passed    (0.01 sec) [100% de similaridade]
-      Start 11: RitualsTest ......................   Passed    (0.01 sec) [Ciclo circadiano e marcos]
-      Start 12: Fase5Test ........................   Passed    (0.01 sec) [EventRing, UCB1, Fadiga]
-      Start 13: Fase6Test ........................   Passed    (0.01 sec) [Biometria, Resumo, Telemetria]
-
-100% tests passed, 0 tests failed out of 13 (histórico v1.4.0) (histórico v1.4.0)
-```
+O CMake define testes headless para os módulos do runtime. Nesta atualização, a suíte completa Linux Release passou (17/17). Os testes do `.exe` Windows foram compilados, mas não executados neste host Linux porque não há Wine ou Windows disponível. O status está em [`PLANO_IMPLEMENTACAO.md`](docs/carmin/PLANO_IMPLEMENTACAO.md).
 
 ---
 

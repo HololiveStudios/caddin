@@ -77,6 +77,10 @@ set(CORE_SRCS
     src/core/sdm.c
     src/core/rituals.c
     src/core/event_ring.c
+    src/core/cognitive_event.c
+    src/core/actuator_guard.c
+    src/core/carmin_snapshot.c
+    src/core/async_request.c
     src/core/bandit.c
     src/core/daily_summary.c
     src/core/telemetry_fifo.c
@@ -149,6 +153,30 @@ endif()
 
 target_link_libraries(caddin PRIVATE ${PLATFORM_LIBS})
 
+# Benchmarks explicitamente invocados; ficam fora do build normal do app.
+function(add_neuro_benchmark target scale dense_reference)
+    add_executable(${target} EXCLUDE_FROM_ALL bench/bench_neuro_step.c neuro.c src/core/persist.c)
+    target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+    target_compile_definitions(${target} PRIVATE BRAIN_STEP_STATS_AVAILABLE=1 PESTINHA_NEURON_SCALE=${scale})
+    if(dense_reference)
+        target_compile_definitions(${target} PRIVATE CADDIN_DENSE_REFERENCE=1)
+    endif()
+    if(NOT WIN32)
+        target_link_libraries(${target} PRIVATE m)
+    endif()
+endfunction()
+
+add_neuro_benchmark(bench_neuro_step_2k 1 FALSE)
+add_neuro_benchmark(bench_neuro_step_2k_dense 1 TRUE)
+add_neuro_benchmark(bench_neuro_step_10k 5 FALSE)
+add_neuro_benchmark(bench_neuro_step_10k_dense 5 TRUE)
+add_neuro_benchmark(bench_neuro_step_100k 50 FALSE)
+add_neuro_benchmark(bench_neuro_step_100k_dense 50 TRUE)
+add_neuro_benchmark(bench_neuro_step_100k_sensory_reference 50 FALSE)
+target_compile_definitions(bench_neuro_step_100k_sensory_reference PRIVATE CADDIN_SENSORY_BERNOULLI_REFERENCE=1)
+add_neuro_benchmark(bench_neuro_step_1m 512 FALSE)
+add_neuro_benchmark(bench_neuro_step_1m_dense 512 TRUE)
+
 # ── Testes Headless Automatizados ──
 enable_testing()
 
@@ -156,6 +184,35 @@ add_executable(test_core src/core/arena.c src/core/rng.c src/core/persist.c test
 target_include_directories(test_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
 target_link_libraries(test_core PRIVATE m)
 add_test(NAME CoreTest COMMAND test_core)
+
+add_executable(test_cognitive_event src/core/cognitive_event.c tests/test_cognitive_event.c)
+target_include_directories(test_cognitive_event PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_cognitive_event PRIVATE -UNDEBUG)
+endif()
+target_link_libraries(test_cognitive_event PRIVATE m)
+add_test(NAME CognitiveEventTest COMMAND test_cognitive_event)
+
+add_executable(test_actuator_guard src/core/actuator_guard.c tests/test_actuator_guard.c)
+target_include_directories(test_actuator_guard PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_actuator_guard PRIVATE -UNDEBUG)
+endif()
+add_test(NAME ActuatorGuardTest COMMAND test_actuator_guard)
+
+add_executable(test_carmin_snapshot src/core/carmin_snapshot.c tests/test_carmin_snapshot.c)
+target_include_directories(test_carmin_snapshot PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_carmin_snapshot PRIVATE -UNDEBUG)
+endif()
+add_test(NAME CarminSnapshotTest COMMAND test_carmin_snapshot)
+
+add_executable(test_async_request src/core/async_request.c tests/test_async_request.c)
+target_include_directories(test_async_request PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_async_request PRIVATE -UNDEBUG)
+endif()
+add_test(NAME AsyncRequestTest COMMAND test_async_request)
 
 add_executable(test_snn src/core/arena.c src/core/rng.c src/core/snn.c tests/test_snn.c)
 target_include_directories(test_snn PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
@@ -219,8 +276,19 @@ add_test(NAME ConfigRulesTest COMMAND test_config_rules)
 
 add_executable(test_sdm src/core/sdm.c tests/test_sdm.c)
 target_include_directories(test_sdm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_sdm PRIVATE -UNDEBUG)
+endif()
 target_link_libraries(test_sdm PRIVATE m)
 add_test(NAME SdmTest COMMAND test_sdm)
+
+add_executable(bench_sdm_association EXCLUDE_FROM_ALL src/core/sdm.c bench/bench_sdm_association.c)
+target_include_directories(bench_sdm_association PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(bench_sdm_association PRIVATE m)
+
+add_executable(simulate_association EXCLUDE_FROM_ALL src/core/sdm.c bench/simulate_association.c)
+target_include_directories(simulate_association PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(simulate_association PRIVATE m)
 
 add_executable(test_rituals src/core/rituals.c tests/test_rituals.c)
 target_include_directories(test_rituals PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)

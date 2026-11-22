@@ -1,11 +1,13 @@
 # Carmin — Plano de implementação M0–M6
 
-**Estado:** ordem preliminar baseada na inspeção inicial.
+**Estado:** M0 parcial; M1 parcial; M2 parcial; M3 iniciado com SDM versionada e benchmark controlado.
 **Atualizado:** 2026-11-22
 
 Este plano não declara tarefas concluídas por existirem módulos com nomes parecidos. Cada etapa começa por localizar o caminho ativo, escrever uma hipótese testável e definir métricas antes da mudança de runtime.
 
-**Progresso:** M0 foi iniciado; M2 configurou 1.048.576 unidades e constrói CSR diretamente com fan-out limitado. A atualização densa, a qualidade comportamental e o custo de execução ainda precisam de medição. Nenhuma etapa está marcada como completa antes de regressões e medições.
+**Progresso do plano anterior:** M0 tem o caminho ativo, inventário numérico e baseline de 2k/10k/100k/1M em três cargas documentados num host; falta instrumentar o app inteiro e fechar inventário de produtores/consumidores. M1 tem evento tipado integrado e testes, mas replay real e versionamento do mapa de grupos nos snapshots faltam. M2 tem curva, STDP, hashes completos coincidentes em séries fixas e amostragem comparada em 30 seeds; falta segundo hardware, carga sustentada e validação comportamental. M0–M2 seguem **parciais**. M3 foi iniciado com persistência SDM2 e benchmark da memória, ainda faltam interferência multiseed, reversão semanticamente tipada e ganho estável em cargas realistas. M4–M6 permanecem pendentes. Nenhuma etapa está completa.
+
+**Plano novo em acompanhamento:** ver [`PLANO_EVENTOS_E_DESKTOP.md`](PLANO_EVENTOS_E_DESKTOP.md), derivado do plano fornecido nesta conversa. O kernel event-driven, contrato síncrono e biblioteca Guard estão implementados em escopo limitado; faltam hardware adicional, carga extrema, integração de política/executor e reorganização funcional validada dos pools.
 
 ## M0 — Inventário executável e linha de base
 
@@ -30,6 +32,8 @@ Este plano não declara tarefas concluídas por existirem módulos com nomes par
 
 **Pronto quando:** contratos exercitados em teste headless e replay de eventos produzir a mesma sequência de decisões/métricas dentro da tolerância definida.
 
+**Situação atual:** parcial. `CarminEvent` v1 tipa versão/tamanho, timestamp, sequência, canal, origem, flags e valor; o lote está ligado ao caminho real em `src/main.c` e o teste headless cobre validação/frescor/privacidade. O fluxo síncrono não precisa de fila concorrente. Replay sintético existe no benchmark; replay de eventos reais e versão/hash do mapa de grupos dentro de snapshots ainda faltam.
+
 ## M2 — Núcleo compacto escalável
 
 **Objetivo:** prototipar o primeiro aumento de capacidade mantendo API de integração e comportamento observável.
@@ -40,7 +44,7 @@ Este plano não declara tarefas concluídas por existirem módulos com nomes par
 - Medir 2k, 10k, 100k e degraus maiores em atividade baixa/média/alta; contar operações e bytes, além de ticks por segundo.
 - Comparar atualização densa e event-driven sob premissas idênticas; declarar latência de despertar e erro numérico.
 
-**Pronto quando:** limites RAM/CPU medidos, comportamento reproduzível e curva de escala validada em pelo menos duas configurações de hardware; nenhuma extrapolação de 1M baseada apenas em contador.
+**Pronto quando:** limites RAM/CPU medidos, comportamento reproduzível e curva de escala validada em pelo menos duas configurações de hardware; nenhuma extrapolação de 1M baseada apenas em contador. **Situação atual:** parcial; há comparação por eventos/densa em 2k/10k/100k/1M e baixa/média/alta atividade num host, documentada em [`CURVA_ESCALA.md`](CURVA_ESCALA.md). A carga alta excede 16 ms, faltam segundo hardware e validação comportamental.
 
 ## M3 — Memória e aprendizado mensuráveis
 
@@ -51,6 +55,12 @@ Este plano não declara tarefas concluídas por existirem módulos com nomes par
 - Implementar um benchmark controlado: associação sintética contexto→resultado, ruído, generalização próxima, esquecimento e replay.
 - Medir sucesso, falso positivo, tempo de resposta e custo de memória; comparar com regra baseline sem aprendizado.
 - Só então testar STDP de três fatores, k-WTA/expansão procedural ou homeostase como mudanças incrementais.
+
+**Progresso:** SDM2 carrega schema, geometria, endereços, contadores, total de escritas e CRC32, recusando truncamento, bytes extras, versão incompatível e checksum errado sem mutar a memória. SDM1 é reconhecido como legado, mas o app reinicializa a SDM porque endereços ausentes impedem recuperar associações corretamente. `bench/bench_sdm_association.c` mede consultas exatas, ruído, replay, sono, interferência e latência contra baseline; primeira coleta: 100% exato, 97,85% com 6,25% ruído, 4,2% no palpite fixo e 100% após sono, numa seed/24 pares. `SdmEpisodeIndex` experimental, até 256 episódios, tem store/replay exatos, substituição de resultado, consolidação e persistência schema/CRC; o app carrega e salva `caddin.episodes`, mas ainda não grava episódios do uso cotidiano. Harness temporal teve 695/720 acertos (96,53%) numa seed. São resultados sintéticos estreitos; faltam multiseed, generalização, saturação e integração cotidiana. M3 segue incompleto.
+
+**Simulação temporal:** `simulate_association` executa 720 frames de relógio virtual, 24 contextos, reversão no frame 360 e consolidação após cada bloco. O episódio é separado do recall distribuído para medir corretamente rótulo exato; uma coleta com seed 42 gerou 695/720 acertos (96,53%), 24 stale, 1 vazio e hash `67aa7c1001b4ae12`. Esse resultado é de uma seed e de índice exato, não demonstra generalização da SDM. Protocolo em [`SIMULACAO.md`](SIMULACAO.md).
+
+**Validação da árvore atual:** suíte headless Linux completa 17/17 passou em Release. Cross-build Windows produziu `caddin.exe` e `caddin_monitor.exe`; execução dos testes Windows não está disponível neste host sem Wine ou Windows.
 
 **Pronto quando:** ganho replicável contra baseline e estabilidade nos cenários de saturação, ausência de recompensa e reversão de associação.
 
@@ -66,6 +76,8 @@ Este plano não declara tarefas concluídas por existirem módulos com nomes par
 
 **Pronto quando:** teste de estresse comprova que latência do núcleo permanece limitada durante timeout/queda do backend e nenhuma proposta inválida atravessa a política.
 
+**Progresso:** `ActuatorGuard` v1 e `CarminAsyncQueue` estão na biblioteca e testes focados cobrem limite de capacidade, tamanho, cancelamento, timeout, conclusão única, confirmação, allowlist e privacidade. Nenhum worker, UI ou executor real está integrado, logo não há teste de carga concorrente ou LLM; M4 continua parcial. `CarminTelemetrySnapshot` v1 captura localmente 120 taxas e um hash de versão/mapa dos grupos em 1Hz, mas ainda não publica nem persiste a estrutura; veja [`CONTRATO_EVENTOS.md`](CONTRATO_EVENTOS.md).
+
 ## M5 — Simulação, consolidação e telemetria
 
 **Objetivo:** validar adaptação fora da sessão real e dar observabilidade suficiente para evolução segura.
@@ -76,6 +88,8 @@ Este plano não declara tarefas concluídas por existirem módulos com nomes par
 - Expor snapshots read-only de taxa por região, atividade, pesos, confiança, decisão e motivo resumido.
 
 **Pronto quando:** relatório demonstra diferença estatística/prática entre estratégia nova e baseline e um checkpoint inválido pode ser rejeitado sem perda do anterior.
+
+**Progresso:** existem harnesses sintéticos reproduzíveis de SDM e associação temporal em [`SDM_BENCHMARK.md`](SDM_BENCHMARK.md) e [`SIMULACAO.md`](SIMULACAO.md). `CarminTelemetrySnapshot` v1 captura contadores read-only e taxas dos 120 pools com fingerprint de população/grupos no loop a 1Hz. A estrutura é descartada localmente, ainda sem buffer público concorrente ou UI; replay de eventos de SO e publicação de snapshot continuam pendentes. Não há teste de persistência com falha de energia/rollback A/B. M5 parcial.
 
 ## M6 — Escala-alvo, otimização e evolução controlada
 
@@ -102,4 +116,4 @@ Partes de interface/política podem ser prototipadas em paralelo após M0 quando
 
 ## Revisão do blueprint fornecido
 
-O blueprint de 1.048.576 unidades é uma fonte de hipóteses detalhadas (SoA, CSR, perfis celulares, regiões, eventos, aprendizado, simulação e runtime assíncrono). A configuração atual chegou a 1.048.576 unidades e usa montagem CSR limitada por fan-out; desempenho real ainda não foi medido. Contratos numéricos e topologia fechados do blueprint ficam pendentes de evidência.
+O blueprint de 1.048.576 unidades é uma fonte de hipóteses detalhadas (SoA, CSR, perfis celulares, regiões, eventos, aprendizado, simulação e runtime assíncrono). A configuração atual chegou a 1.048.576 unidades e usa montagem CSR limitada por fan-out. Há medidas reproduzíveis de kernel em um host; contratos numéricos e topologia fechados do blueprint continuam pendentes de evidência.

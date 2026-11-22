@@ -1,3 +1,6 @@
+#if !defined(_WIN32)
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "neuro.h"
 #include "network_data.h"
 #include "src/core/persist.h"
@@ -6,10 +9,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 #define NS (PESTINHA_CHANNELS * PESTINHA_SENSORY_PER_POOL)
 #define NL (PESTINHA_NEURONS - NS)
 #define NPOOLS (PESTINHA_CHANNELS + PESTINHA_INTERNEURONS + PESTINHA_MOTORS)
+#define NDEFAULT_CONNS ((int)(sizeof(DEFAULT_CONNS) / sizeof(DEFAULT_CONNS[0])))
+#define MAX_CONN_RULES (sizeof(DEFAULT_CONNS) / sizeof(DEFAULT_CONNS[0]) + PESTINHA_INTERNEURONS)
 
 #define LEGACY_NEURONS 2048u
 #define LEGACY_SENSORY 512u
@@ -17,6 +27,7 @@
 #define LEGACY_MOTOR 384u
 #define LEGACY_FREE (LEGACY_NEURONS - LEGACY_SENSORY)
 #define MAX_OUT_DEGREE 64u
+#define MAX_CACHED_GAP 400u
 
 #define STDP_TAU_POS 20.0  /* ms */
 #define STDP_TAU_NEG 20.0  /* ms */
@@ -25,6 +36,12 @@
 #define STDP_W_MIN  -0.5f
 #define STDP_W_MAX   1.0f
 
+typedef struct {
+    int post_pool;
+    double weight;
+    double density;
+} ConnRule;
+
 struct Brain {
     unsigned int rng;
 
@@ -32,6 +49,14 @@ struct Brain {
     int sizes[NPOOLS];
     int kind[NPOOLS];
     const char *names[NPOOLS];
+    uint8_t *pool_of_neuron;
+    ConnRule conn_rules[NPOOLS][MAX_CONN_RULES];
+    uint16_t conn_rule_count[NPOOLS];
+    double passive_decay_power[NPOOLS][MAX_CACHED_GAP + 1u];
+    double passive_adapt_power[NPOOLS][MAX_CACHED_GAP + 1u];
+    double passive_kernel[NPOOLS][MAX_CACHED_GAP + 1u];
+    double stdp_ltp_factor[50];
+    double stdp_ltd_factor[50];
 
     uint32_t *row_ptr;                  /* CSR: início das sinapses de cada neurônio pré */
     uint32_t *post;                      /* Índices pós-sinápticos */
@@ -46,9 +71,15 @@ struct Brain {
     double *decay;
     int *refractory;
     double *drive;
+    uint64_t *drive_stamp;
+    uint64_t *last_update_tick;
 
-    uint8_t *spike;
-    uint8_t *fired_last_step;
+    uint32_t *fired_ids;
+    uint32_t *next_fired_ids;
+    uint32_t fired_count;
+    uint32_t next_fired_count;
+    uint32_t *active_targets;
+    uint32_t active_target_count;
     uint8_t *plastic_mark;
     double *last_spike_t;
     double *pre_gain;
@@ -58,6 +89,7 @@ struct Brain {
     double *sensory_rec;
     double *efficacy;
     double *probability;
+    uint64_t *sensory_update_tick;
 
     double levels[PESTINHA_CHANNELS];
     double pool_counts[NPOOLS];
@@ -68,6 +100,8 @@ struct Brain {
     uint32_t plastic_pre_count;
     double total_plastic_delta;
     double time_ms;
+    uint64_t tick;
+    BrainStepStats stats;
 };
 
 static unsigned int rand_u(unsigned int *s) {
@@ -81,17 +115,28 @@ static double urand(Brain *b) {
     return ((rand_u(&b->rng) >> 8) + 1.0) / 16777217.0;
 }
 
+static uint64_t monotonic_ns(void) {
+#ifdef _WIN32
+    LARGE_INTEGER counter, frequency;
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&frequency);
+    return (uint64_t)((counter.QuadPart * 1000000000ULL) / frequency.QuadPart);
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+#endif
+}
+
 static int find_pool(const Brain *b, const char *n) {
     for (int i = 0; i < NPOOLS; ++i) {
-        if (!strcmp(n, b->names[i])) return i;
+        if (b->names[i] && b->names[i][0] == n[0] && !strcmp(n, b->names[i])) return i;
     }
     return -1;
 }
 
 static int pre_pool_for_index(const Brain *b, uint32_t index) {
-    for (int p = 0; p < NPOOLS; ++p)
-        if ((uint32_t)b->starts[p] <= index && index < (uint32_t)(b->starts[p] + b->sizes[p])) return p;
-    return -1;
+    return (b && index < PESTINHA_NEURONS) ? b->pool_of_neuron[index] : -1;
 }
 
 static int brain_validate_connectome_defs(const Brain *b) {
@@ -153,32 +198,21 @@ static void add_edge(uint32_t *posts, float *weights, int8_t *bases,
 static void build_row(const Brain *b, uint32_t pre, unsigned int *rng, uint32_t *posts, float *weights,
                       int8_t *bases, uint32_t *count) {
     *count = 0;
-    int pre_pool = -1;
-    for (int p = 0; p < NPOOLS; ++p) {
-        if ((uint32_t)b->starts[p] <= pre && pre < (uint32_t)(b->starts[p] + b->sizes[p])) {
-            pre_pool = p;
-            break;
-        }
-    }
+    int pre_pool = pre_pool_for_index(b, pre);
     if (pre_pool < 0) return;
 
-    const int num_conns = (int)(sizeof(DEFAULT_CONNS) / sizeof(DEFAULT_CONNS[0]));
-    uint32_t rules = 0;
-    for (int i = 0; i < num_conns; ++i) if (find_pool(b, DEFAULT_CONNS[i].pre) == pre_pool) rules++;
-    int is_assoc = pre_pool >= PESTINHA_CHANNELS && pre_pool < PESTINHA_CHANNELS + PESTINHA_INTERNEURONS;
-    if (is_assoc) rules += PESTINHA_INTERNEURONS - 1;
+    uint32_t rules = b->conn_rule_count[pre_pool];
     if (!rules) return;
 
     uint32_t per_rule = MAX_OUT_DEGREE / rules;
     uint32_t remainder = MAX_OUT_DEGREE % rules;
     uint32_t rule_no = 0;
-    for (int i = 0; i < num_conns; ++i) {
-        const ConnDef *c = &DEFAULT_CONNS[i];
-        if (find_pool(b, c->pre) != pre_pool) continue;
-        int post_pool = find_pool(b, c->post);
+    for (uint32_t i = 0; i < rules; ++i) {
+        const ConnRule *rule = &b->conn_rules[pre_pool][i];
+        int post_pool = rule->post_pool;
         uint32_t budget = per_rule + (rule_no++ < remainder ? 1u : 0u);
         uint32_t target_count = (uint32_t)b->sizes[post_pool];
-        uint32_t wanted = (uint32_t)ceil(target_count * c->density);
+        uint32_t wanted = (uint32_t)ceil(target_count * rule->density);
         if (wanted > budget) wanted = budget;
         for (uint32_t k = 0; k < wanted; ++k) {
             uint32_t target;
@@ -188,27 +222,52 @@ static void build_row(const Brain *b, uint32_t pre, unsigned int *rng, uint32_t 
                 tries++;
             } while (edge_exists(posts, *count, target) >= 0 && tries < target_count + 1u);
             if (edge_exists(posts, *count, target) < 0)
-                add_edge(posts, weights, bases, count, target, c->weight);
+                add_edge(posts, weights, bases, count, target, rule->weight);
         }
     }
-    if (is_assoc) {
+}
+
+static int brain_prepare_conn_rules(Brain *b) {
+    if (!b) return 0;
+    for (int i = 0; i < NDEFAULT_CONNS; ++i) {
+        const ConnDef *c = &DEFAULT_CONNS[i];
+        int pre_pool = find_pool(b, c->pre), post_pool = find_pool(b, c->post);
+        if (pre_pool < 0 || post_pool < 0) return 0;
+        uint16_t at = b->conn_rule_count[pre_pool];
+        if (at >= MAX_CONN_RULES) return 0;
+        b->conn_rules[pre_pool][at] = (ConnRule){post_pool, c->weight, c->density};
+        b->conn_rule_count[pre_pool]++;
+    }
+    for (int pre_pool = PESTINHA_CHANNELS; pre_pool < PESTINHA_CHANNELS + PESTINHA_INTERNEURONS; ++pre_pool) {
         for (int post_pool = PESTINHA_CHANNELS; post_pool < PESTINHA_CHANNELS + PESTINHA_INTERNEURONS; ++post_pool) {
             if (post_pool == pre_pool) continue;
-            uint32_t budget = per_rule + (rule_no++ < remainder ? 1u : 0u);
-            uint32_t target_count = (uint32_t)b->sizes[post_pool];
-            uint32_t wanted = (uint32_t)ceil(target_count * 0.12);
-            if (wanted > budget) wanted = budget;
-            for (uint32_t k = 0; k < wanted; ++k) {
-                uint32_t target;
-                uint32_t tries = 0;
-                do {
-                target = (uint32_t)b->starts[post_pool] + (target_count ? rand_u(rng) % target_count : 0u);
-                    tries++;
-                } while (edge_exists(posts, *count, target) >= 0 && tries < target_count + 1u);
-                if (edge_exists(posts, *count, target) < 0)
-                    add_edge(posts, weights, bases, count, target, 0.15);
-            }
+            uint16_t at = b->conn_rule_count[pre_pool];
+            if (at >= MAX_CONN_RULES) return 0;
+            b->conn_rules[pre_pool][at] = (ConnRule){post_pool, 0.15, 0.12};
+            b->conn_rule_count[pre_pool]++;
         }
+    }
+    return 1;
+}
+
+static void brain_prepare_passive_tables(Brain *b) {
+    for (int p = PESTINHA_CHANNELS; p < NPOOLS; ++p) {
+        uint32_t j = (uint32_t)b->starts[p] - NS;
+        double d = b->decay[j], a = b->adapt_decay[j];
+        for (uint32_t gap = 0; gap <= MAX_CACHED_GAP; ++gap) {
+            double dp = pow(d, (double)gap), ap = pow(a, (double)gap);
+            b->passive_decay_power[p][gap] = dp;
+            b->passive_adapt_power[p][gap] = ap;
+            b->passive_kernel[p][gap] = gap == 0 ? 0.0 :
+                (fabs(d - a) < 1e-12 ? (double)gap * pow(d, (double)(gap - 1u)) : (dp - ap) / (d - a));
+        }
+    }
+}
+
+static void brain_prepare_stdp_tables(Brain *b) {
+    for (int ms = 1; ms < 50; ++ms) {
+        b->stdp_ltp_factor[ms] = exp(-(double)ms / STDP_TAU_POS);
+        b->stdp_ltd_factor[ms] = exp(-(double)ms / STDP_TAU_NEG);
     }
 }
 
@@ -285,12 +344,14 @@ Brain *brain_create(unsigned int seed, const char *temperament) {
 #define ALLOC_FIELD(field, count) do { b->field = calloc((size_t)(count), sizeof(*b->field)); if (!b->field) { brain_destroy(b); return NULL; } } while (0)
     ALLOC_FIELD(v, NL); ALLOC_FIELD(adapt, NL); ALLOC_FIELD(adapt_b, NL);
     ALLOC_FIELD(adapt_decay, NL); ALLOC_FIELD(decay, NL); ALLOC_FIELD(refractory, NL);
-    ALLOC_FIELD(drive, NL); ALLOC_FIELD(spike, PESTINHA_NEURONS);
-    ALLOC_FIELD(fired_last_step, PESTINHA_NEURONS);
+    ALLOC_FIELD(drive, NL); ALLOC_FIELD(drive_stamp, NL); ALLOC_FIELD(last_update_tick, NL);
+    ALLOC_FIELD(fired_ids, PESTINHA_NEURONS); ALLOC_FIELD(next_fired_ids, PESTINHA_NEURONS);
+    ALLOC_FIELD(active_targets, NL); ALLOC_FIELD(pool_of_neuron, PESTINHA_NEURONS);
     ALLOC_FIELD(plastic_mark, PESTINHA_NEURONS);
     ALLOC_FIELD(last_spike_t, PESTINHA_NEURONS); ALLOC_FIELD(pre_gain, PESTINHA_NEURONS);
     ALLOC_FIELD(sensory_rate, NS); ALLOC_FIELD(sensory_d, NS); ALLOC_FIELD(sensory_rec, NS);
     ALLOC_FIELD(efficacy, NS); ALLOC_FIELD(probability, NS);
+    ALLOC_FIELD(sensory_update_tick, NS);
     ALLOC_FIELD(plastic_pre, PESTINHA_NEURONS);
 #undef ALLOC_FIELD
 
@@ -304,6 +365,7 @@ Brain *brain_create(unsigned int seed, const char *temperament) {
         cursor += n;
         for (uint32_t j = 0; j < n; ++j) {
             uint32_t q = (uint32_t)b->starts[i] + (uint32_t)j;
+            b->pool_of_neuron[q] = (uint8_t)i;
             b->sensory_rate[q] = SENS_POOLS[i].rate;
             b->sensory_d[q]    = SENS_POOLS[i].d;
             b->sensory_rec[q]  = 0.001 / SENS_POOLS[i].tau_rec;
@@ -322,6 +384,7 @@ Brain *brain_create(unsigned int seed, const char *temperament) {
 
         for (uint32_t j = 0; j < (uint32_t)b->sizes[p]; ++j) {
             int q = b->starts[p] + j - NS;
+            b->pool_of_neuron[(uint32_t)b->starts[p] + j] = (uint8_t)p;
             b->adapt_b[q]     = INTER_POOLS[i].b;
             b->adapt_decay[q] = exp(-0.001 / INTER_POOLS[i].bt);
             b->decay[q]       = exp(-1.0 / INTER_POOLS[i].tau);
@@ -339,6 +402,7 @@ Brain *brain_create(unsigned int seed, const char *temperament) {
 
         for (uint32_t j = 0; j < (uint32_t)b->sizes[p]; ++j) {
             int q = b->starts[p] + j - NS;
+            b->pool_of_neuron[(uint32_t)b->starts[p] + j] = (uint8_t)p;
             b->adapt_b[q]     = MOTOR_POOLS[i].b;
             b->adapt_decay[q] = exp(-0.001 / MOTOR_POOLS[i].bt);
             b->decay[q]       = exp(-1.0 / MOTOR_POOLS[i].tau);
@@ -361,6 +425,13 @@ Brain *brain_create(unsigned int seed, const char *temperament) {
         return NULL;
     }
 
+    if (!brain_prepare_conn_rules(b)) {
+        brain_destroy(b);
+        return NULL;
+    }
+    brain_prepare_passive_tables(b);
+    brain_prepare_stdp_tables(b);
+
     /* Montagem direta CSR, sem matriz N×NL. */
     if (!brain_build_connectome(b)) {
         brain_destroy(b);
@@ -374,104 +445,253 @@ void brain_destroy(Brain *b) {
     if (!b) return;
     brain_release_connectome(b);
     free(b->v); free(b->adapt); free(b->adapt_b); free(b->adapt_decay);
-    free(b->decay); free(b->refractory); free(b->drive); free(b->spike);
-    free(b->fired_last_step);
+    free(b->decay); free(b->refractory); free(b->drive); free(b->drive_stamp);
+    free(b->last_update_tick); free(b->fired_ids); free(b->next_fired_ids);
+    free(b->active_targets); free(b->pool_of_neuron);
     free(b->plastic_mark);
     free(b->last_spike_t); free(b->pre_gain); free(b->sensory_rate);
     free(b->sensory_d); free(b->sensory_rec); free(b->efficacy); free(b->probability);
+    free(b->sensory_update_tick);
     free(b->plastic_pre);
     free(b);
 }
 
 void brain_stimulate(Brain *b, const double values[PESTINHA_CHANNELS]) {
-    if (!b) return;
+    if (!b || !values) return;
     for (int c = 0; c < PESTINHA_CHANNELS; ++c) {
         double x = fmax(0.0, fmin(1.0, values[c]));
         b->levels[c] = x;
-        for (uint32_t j = 0; j < (uint32_t)b->sizes[c]; ++j) {
-            uint32_t n = (uint32_t)b->starts[c] + j;
-            b->probability[n] = b->sensory_rate[n] * x * b->efficacy[n] * 0.001;
+        if (x <= 0.0) continue;
+        uint32_t start = (uint32_t)b->starts[c];
+        uint32_t end = start + (uint32_t)b->sizes[c];
+        for (uint32_t neuron = start; neuron < end; ++neuron) {
+            uint64_t elapsed = b->tick - b->sensory_update_tick[neuron];
+            if (elapsed) {
+                b->efficacy[neuron] = fmin(1.0, b->efficacy[neuron] +
+                    b->sensory_rec[neuron] * (double)elapsed);
+                b->sensory_update_tick[neuron] = b->tick;
+            }
+            b->probability[neuron] = b->sensory_rate[neuron] * x * 0.001;
         }
     }
 }
 
-static void substep(Brain *b) {
-    memset(b->drive, 0, (size_t)NL * sizeof(*b->drive));
-    b->active_spikes_frame = 0;
-    memset(b->spike, 0, (size_t)PESTINHA_NEURONS * sizeof(*b->spike));
-
-    /* A. Atualiza neurônios sensoriais */
-    for (uint32_t i = 0; i < NS; ++i) {
-        if (b->probability[i] > 0.0 && urand(b) < b->probability[i]) {
-            b->spike[i] = 1;
-            b->last_spike_t[i] = b->time_ms;
-            b->efficacy[i] = fmax(0.0, b->efficacy[i] - b->sensory_d[i]);
-            b->active_spikes_frame++;
-            { int pool = pre_pool_for_index(b, (uint32_t)i); if (pool >= 0) b->pool_counts[pool] += 1.0; }
+/* Avança uma célula sem entrada em forma fechada, preservando leakage/adaptação. */
+static void advance_passive_gap(Brain *b, uint32_t j, uint64_t gap) {
+    if (!gap) return;
+    uint64_t blocked = (uint64_t)b->refractory[j];
+    if (blocked > gap) blocked = gap;
+    uint64_t active = gap - blocked;
+    double adapt0 = b->adapt[j];
+    int pool = b->pool_of_neuron[NS + j];
+    double adapt_decay = b->adapt_decay[j];
+    double decay = b->decay[j];
+    if (active) {
+        double decay_power, adapt_power, adapt_after_refractory, kernel;
+        if (gap <= MAX_CACHED_GAP) {
+            decay_power = b->passive_decay_power[pool][active];
+            adapt_power = b->passive_adapt_power[pool][active];
+            adapt_after_refractory = adapt0 * b->passive_adapt_power[pool][blocked];
+            kernel = b->passive_kernel[pool][active];
         } else {
-            b->spike[i] = 0;
-            b->efficacy[i] = fmin(1.0, b->efficacy[i] + b->sensory_rec[i]);
+            adapt_after_refractory = adapt0 * pow(adapt_decay, (double)blocked);
+            decay_power = pow(decay, (double)active);
+            adapt_power = pow(adapt_decay, (double)active);
+            kernel = fabs(decay - adapt_decay) < 1e-12
+                ? (double)active * pow(decay, (double)(active - 1u))
+                : (decay_power - adapt_power) / (decay - adapt_decay);
         }
-        if (b->spike[i] && !b->plastic_mark[i]) {
-            b->plastic_mark[i] = 1;
-            b->plastic_pre[b->plastic_pre_count++] = i;
-        }
+        b->v[j] = b->v[j] * decay_power - adapt_after_refractory * kernel;
     }
+    b->adapt[j] = gap <= MAX_CACHED_GAP ? adapt0 * b->passive_adapt_power[pool][gap]
+                                       : adapt0 * pow(adapt_decay, (double)gap);
+    b->refractory[j] -= (int)blocked;
+}
 
-    /* B. Propaga spikes do subpasso anterior. */
-    for (uint32_t i = 0; i < PESTINHA_NEURONS; ++i) {
-        if (b->fired_last_step[i]) {
-            double gain = b->pre_gain[i];
-            for (uint32_t syn = b->row_ptr[i]; syn < b->row_ptr[i + 1]; ++syn) {
-                uint32_t post_idx = b->post[syn];
-                b->drive[post_idx - NS] += b->w[syn] * gain;
+static void record_spike(Brain *b, uint32_t neuron, double now_ms) {
+    b->next_fired_ids[b->next_fired_count++] = neuron;
+    if (!b->plastic_mark[neuron]) {
+        b->plastic_mark[neuron] = 1;
+        b->plastic_pre[b->plastic_pre_count++] = neuron;
+    }
+    b->last_spike_t[neuron] = now_ms;
+    b->active_spikes_frame++;
+    b->stats.spikes_emitted++;
+    int pool = pre_pool_for_index(b, neuron);
+    if (pool >= 0) b->pool_counts[pool] += 1.0;
+}
+
+static void substep(Brain *b) {
+    b->tick++;
+    b->active_target_count = 0;
+    b->next_fired_count = 0;
+    b->active_spikes_frame = 0;
+    const double now_ms = b->time_ms;
+    uint64_t phase_start_ns = monotonic_ns();
+
+    /* Sensores por unidade em referência; o padrão usa propostas geométricas com thinning. */
+    for (int c = 0; c < PESTINHA_CHANNELS; ++c) {
+        if (b->levels[c] <= 0.0) continue;
+        uint32_t start = (uint32_t)b->starts[c];
+        uint32_t end = start + (uint32_t)b->sizes[c];
+        b->stats.sensory_updates += end - start;
+        double p = b->probability[start];
+#ifdef CADDIN_SENSORY_BERNOULLI_REFERENCE
+        for (uint32_t neuron = start; neuron < end; ++neuron) {
+            b->stats.sensory_proposals++;
+            uint64_t elapsed = b->tick - b->sensory_update_tick[neuron];
+            b->efficacy[neuron] = fmin(1.0, b->efficacy[neuron] + b->sensory_rec[neuron] * (double)elapsed);
+            b->sensory_update_tick[neuron] = b->tick;
+            if (urand(b) < p * b->efficacy[neuron]) {
+                b->efficacy[neuron] = fmax(0.0, b->efficacy[neuron] - b->sensory_d[neuron]);
+                b->last_spike_t[neuron] = now_ms;
+                b->next_fired_ids[b->next_fired_count++] = neuron;
+                if (!b->plastic_mark[neuron]) { b->plastic_mark[neuron] = 1; b->plastic_pre[b->plastic_pre_count++] = neuron; }
+                b->active_spikes_frame++; b->stats.spikes_emitted++; b->stats.sensory_spikes_emitted++;
+                int pool = pre_pool_for_index(b, neuron);
+                if (pool >= 0) b->pool_counts[pool] += 1.0;
             }
         }
+#else
+        if (p >= 1.0) {
+            for (uint32_t neuron = start; neuron < end; ++neuron) {
+                b->stats.sensory_proposals++;
+                uint64_t elapsed = b->tick - b->sensory_update_tick[neuron];
+                b->efficacy[neuron] = fmin(1.0, b->efficacy[neuron] + b->sensory_rec[neuron] * (double)elapsed);
+                b->sensory_update_tick[neuron] = b->tick;
+                if (urand(b) < b->efficacy[neuron]) {
+                    b->efficacy[neuron] = fmax(0.0, b->efficacy[neuron] - b->sensory_d[neuron]);
+                    b->last_spike_t[neuron] = now_ms;
+                    b->next_fired_ids[b->next_fired_count++] = neuron;
+                    if (!b->plastic_mark[neuron]) { b->plastic_mark[neuron] = 1; b->plastic_pre[b->plastic_pre_count++] = neuron; }
+                    b->active_spikes_frame++; b->stats.spikes_emitted++; b->stats.sensory_spikes_emitted++;
+                    int pool = pre_pool_for_index(b, neuron);
+                    if (pool >= 0) b->pool_counts[pool] += 1.0;
+                }
+            }
+        } else if (p > 0.0) {
+            const double log_failure = log1p(-p);
+            uint32_t cursor = start;
+            while (cursor < end) {
+                double skip_real = log(urand(b)) / log_failure;
+                if (skip_real > (double)(end - cursor)) break;
+                uint32_t skip = (uint32_t)skip_real;
+                uint64_t candidate = (uint64_t)cursor + skip;
+                if (candidate >= end) break;
+                uint32_t neuron = (uint32_t)candidate;
+                b->stats.sensory_proposals++;
+                uint64_t elapsed = b->tick - b->sensory_update_tick[neuron];
+                b->efficacy[neuron] = fmin(1.0, b->efficacy[neuron] + b->sensory_rec[neuron] * (double)elapsed);
+                b->sensory_update_tick[neuron] = b->tick;
+                if (urand(b) < b->efficacy[neuron]) {
+                b->efficacy[neuron] = fmax(0.0, b->efficacy[neuron] - b->sensory_d[neuron]);
+                b->last_spike_t[neuron] = now_ms;
+                b->next_fired_ids[b->next_fired_count++] = neuron;
+                if (!b->plastic_mark[neuron]) {
+                    b->plastic_mark[neuron] = 1;
+                    b->plastic_pre[b->plastic_pre_count++] = neuron;
+                }
+                b->active_spikes_frame++;
+                b->stats.spikes_emitted++;
+                b->stats.sensory_spikes_emitted++;
+                int pool = pre_pool_for_index(b, neuron);
+                if (pool >= 0) b->pool_counts[pool] += 1.0;
+                }
+                cursor = neuron + 1u;
+            }
+        }
+#endif
     }
+    uint64_t propagation_start_ns = monotonic_ns();
+    b->stats.sensory_ns += propagation_start_ns - phase_start_ns;
 
-    /* C. Atualiza potencial de membrana (LIF) dos neurônios livres */
+    /* Propaga somente os IDs que dispararam no subpasso anterior. */
+    for (uint32_t k = 0; k < b->fired_count; ++k) {
+        uint32_t pre = b->fired_ids[k];
+        double gain = b->pre_gain[pre];
+        for (uint32_t syn = b->row_ptr[pre]; syn < b->row_ptr[pre + 1u]; ++syn) {
+            uint32_t post_idx = b->post[syn];
+            uint32_t j = post_idx - NS;
+            if (b->drive_stamp[j] != b->tick) {
+                b->drive_stamp[j] = b->tick;
+                b->drive[j] = 0.0;
+                b->active_targets[b->active_target_count++] = j;
+            }
+            b->drive[j] += b->w[syn] * gain;
+            b->stats.synapses_traversed++;
+        }
+    }
+    uint64_t integration_start_ns = monotonic_ns();
+    b->stats.propagation_ns += integration_start_ns - propagation_start_ns;
+
+    /* Referência densa compilável para comparar com o kernel de eventos. */
+#ifdef CADDIN_DENSE_REFERENCE
     for (uint32_t j = 0; j < NL; ++j) {
-        uint32_t n_idx = NS + j;
-
+        b->stats.neuron_updates++;
         if (b->refractory[j] > 0) {
             b->refractory[j]--;
-            b->spike[n_idx] = 0;
+            b->adapt[j] *= b->adapt_decay[j];
         } else {
-            b->v[j] = b->v[j] * b->decay[j] + b->drive[j] - b->adapt[j];
+            double drive = b->drive_stamp[j] == b->tick ? b->drive[j] : 0.0;
+            b->v[j] = b->v[j] * b->decay[j] + drive - b->adapt[j];
             if (b->v[j] >= 1.0) {
-                b->spike[n_idx] = 1;
-                b->last_spike_t[n_idx] = b->time_ms;
                 b->v[j] = 0.0;
                 b->adapt[j] += b->adapt_b[j];
                 b->refractory[j] = 3;
-                b->active_spikes_frame++;
-                { int pool = pre_pool_for_index(b, (uint32_t)n_idx); if (pool >= 0) b->pool_counts[pool] += 1.0; }
-            } else {
-                b->spike[n_idx] = 0;
+                record_spike(b, NS + j, now_ms);
             }
+            b->adapt[j] *= b->adapt_decay[j];
         }
-        if (b->spike[n_idx] && !b->plastic_mark[n_idx]) {
-            b->plastic_mark[n_idx] = 1;
-            b->plastic_pre[b->plastic_pre_count++] = n_idx;
-        }
-        b->adapt[j] *= b->adapt_decay[j];
+        b->last_update_tick[j] = b->tick;
     }
+#else
+    /* Integra apenas alvos recebidos. Estados silenciosos avançam lazy ao despertar. */
+    for (uint32_t k = 0; k < b->active_target_count; ++k) {
+        uint32_t j = b->active_targets[k];
+        uint32_t neuron = NS + j;
+        uint64_t elapsed = b->tick - b->last_update_tick[j];
+        uint64_t gap = elapsed ? elapsed - 1u : 0u;
+        advance_passive_gap(b, j, gap);
+        b->stats.neuron_updates++;
 
-    /* D. Propagação no passo seguinte preserva a ordem original da dinâmica. */
-    memcpy(b->fired_last_step, b->spike, (size_t)PESTINHA_NEURONS * sizeof(*b->spike));
+        if (b->refractory[j] > 0) {
+            b->refractory[j]--;
+            b->adapt[j] *= b->adapt_decay[j];
+        } else {
+            b->v[j] = b->v[j] * b->decay[j] + b->drive[j] - b->adapt[j];
+            if (b->v[j] >= 1.0) {
+                b->v[j] = 0.0;
+                b->adapt[j] += b->adapt_b[j];
+                b->refractory[j] = 3;
+                record_spike(b, neuron, now_ms);
+            }
+            b->adapt[j] *= b->adapt_decay[j];
+        }
+        b->last_update_tick[j] = b->tick;
+    }
+#endif
+    uint64_t integration_end_ns = monotonic_ns();
+    b->stats.integration_ns += integration_end_ns - integration_start_ns;
 
+    uint32_t *previous_ids = b->fired_ids;
+    b->fired_ids = b->next_fired_ids;
+    b->next_fired_ids = previous_ids;
+    b->fired_count = b->next_fired_count;
+    b->next_fired_count = 0;
     b->time_ms += 1.0;
 }
 
 void brain_step(Brain *b, double milliseconds) {
     if (!b) return;
     int n = (int)fmax(1.0, fmin(400.0, round(milliseconds)));
+    uint64_t start_ns = monotonic_ns();
     b->plastic_pre_count = 0;
     memset(b->plastic_mark, 0, (size_t)PESTINHA_NEURONS * sizeof(*b->plastic_mark));
+    memset(&b->stats, 0, sizeof(b->stats));
+    b->stats.dense_neuron_updates = (uint64_t)n * PESTINHA_NEURONS;
 
-    for (int i = 0; i < n; ++i) {
-        substep(b);
-    }
+    for (int i = 0; i < NPOOLS; ++i) b->pool_counts[i] = 0.0;
+    for (int i = 0; i < n; ++i) substep(b);
 
     for (int i = 0; i < NPOOLS; ++i) {
         double r = b->pool_counts[i] / (n * 0.001 * b->sizes[i]);
@@ -479,6 +699,8 @@ void brain_step(Brain *b, double milliseconds) {
         b->pool_rates[i] += alpha * (r - b->pool_rates[i]);
         b->pool_counts[i] = 0.0;
     }
+    uint64_t end_ns = monotonic_ns();
+    b->stats.elapsed_ns = end_ns >= start_ns ? end_ns - start_ns : 0;
 }
 
 double brain_motor(const Brain *b, int i) {
@@ -495,7 +717,9 @@ double brain_efficacy(const Brain *b, int c) {
     if (!b || c < 0 || c >= PESTINHA_CHANNELS) return 0.0;
     double sum = 0.0;
     for (uint32_t j = 0; j < (uint32_t)b->sizes[c]; ++j) {
-        sum += b->efficacy[b->starts[c] + j];
+        uint32_t neuron = (uint32_t)b->starts[c] + j;
+        uint64_t elapsed = b->tick - b->sensory_update_tick[neuron];
+        sum += fmin(1.0, b->efficacy[neuron] + b->sensory_rec[neuron] * (double)elapsed);
     }
     return sum / b->sizes[c];
 }
@@ -530,10 +754,16 @@ void brain_learn_stdp(Brain *b, double reward_factor, double dt_sec) {
 
             if (dt > 0.0 && dt < 50.0) {
                 /* LTP (Potenciação) */
-                dw = STDP_A_POS * exp(-dt / STDP_TAU_POS);
+                int delta_ms = (int)dt;
+                double factor = dt == (double)delta_ms ? b->stdp_ltp_factor[delta_ms]
+                                                       : exp(-dt / STDP_TAU_POS);
+                dw = STDP_A_POS * factor;
             } else if (dt < 0.0 && dt > -50.0) {
                 /* LTD (Depressão) */
-                dw = -STDP_A_NEG * exp(dt / STDP_TAU_NEG);
+                int delta_ms = (int)(-dt);
+                double factor = -dt == (double)delta_ms ? b->stdp_ltd_factor[delta_ms]
+                                                        : exp(dt / STDP_TAU_NEG);
+                dw = -STDP_A_NEG * factor;
             }
 
             /* Modulação Trifatorial por Recompensa/Dopamina */
@@ -562,6 +792,7 @@ void brain_reset_habituation(Brain *b) {
     for (uint32_t i = 0; i < NS; ++i) {
         b->efficacy[i] = 1.0;
         b->pre_gain[i] = 1.0;
+        b->sensory_update_tick[i] = b->tick;
     }
 }
 
@@ -571,6 +802,73 @@ double brain_pool_rate(const Brain *b, int i) {
 
 int brain_pool_count(void) { return NPOOLS; }
 uint32_t brain_synapse_count(const Brain *b) { return b ? b->n_synapses : 0; }
+
+bool brain_step_stats(const Brain *b, BrainStepStats *out) {
+    if (!b || !out) return false;
+    *out = b->stats;
+    return true;
+}
+
+#ifdef BRAIN_STEP_STATS_AVAILABLE
+static uint64_t bench_hash_bytes(uint64_t hash, const void *data, size_t size) {
+    const unsigned char *bytes = data;
+    for (size_t i = 0; i < size; ++i) hash = (hash ^ bytes[i]) * 1099511628211ULL;
+    return hash;
+}
+
+static uint64_t bench_hash_double(uint64_t hash, double value) {
+    int64_t quantized = isfinite(value) ? (int64_t)llround(value * 1e9) : INT64_MIN;
+    return bench_hash_bytes(hash, &quantized, sizeof(quantized));
+}
+
+static int compare_u32(const void *left, const void *right) {
+    uint32_t a = *(const uint32_t *)left, b = *(const uint32_t *)right;
+    return (a > b) - (a < b);
+}
+
+uint64_t brain_bench_state_hash(Brain *b) {
+    if (!b) return 0;
+    uint64_t hash = 1469598103934665603ULL;
+    hash = bench_hash_bytes(hash, &b->rng, sizeof(b->rng));
+    hash = bench_hash_bytes(hash, &b->tick, sizeof(b->tick));
+    hash = bench_hash_double(hash, b->time_ms);
+    for (uint32_t i = 0; i < NS; ++i) {
+        uint64_t elapsed = b->tick - b->sensory_update_tick[i];
+        b->efficacy[i] = fmin(1.0, b->efficacy[i] + b->sensory_rec[i] * (double)elapsed);
+        b->sensory_update_tick[i] = b->tick;
+        hash = bench_hash_double(hash, b->efficacy[i]);
+        hash = bench_hash_double(hash, b->last_spike_t[i]);
+    }
+    for (uint32_t j = 0; j < NL; ++j) {
+        uint64_t elapsed = b->tick - b->last_update_tick[j];
+        if (elapsed) advance_passive_gap(b, j, elapsed);
+        b->last_update_tick[j] = b->tick;
+        hash = bench_hash_double(hash, b->v[j]);
+        hash = bench_hash_double(hash, b->adapt[j]);
+        hash = bench_hash_bytes(hash, &b->refractory[j], sizeof(b->refractory[j]));
+        hash = bench_hash_double(hash, b->last_spike_t[NS + j]);
+    }
+    for (uint32_t i = 0; i < PESTINHA_NEURONS; ++i)
+        hash = bench_hash_double(hash, b->pre_gain[i]);
+    for (uint32_t i = 0; i < NS; ++i)
+        hash = bench_hash_double(hash, b->probability[i]);
+    for (uint32_t i = 0; i < b->n_synapses; ++i)
+        hash = bench_hash_bytes(hash, &b->w[i], sizeof(b->w[i]));
+    for (int i = 0; i < NPOOLS; ++i)
+        hash = bench_hash_double(hash, b->pool_rates[i]);
+
+    uint32_t *ids = malloc((size_t)b->fired_count * sizeof(*ids));
+    if (!ids && b->fired_count) return 0;
+    if (b->fired_count) {
+        memcpy(ids, b->fired_ids, (size_t)b->fired_count * sizeof(*ids));
+        qsort(ids, b->fired_count, sizeof(*ids), compare_u32);
+    }
+    hash = bench_hash_bytes(hash, &b->fired_count, sizeof(b->fired_count));
+    hash = bench_hash_bytes(hash, ids, (size_t)b->fired_count * sizeof(*ids));
+    free(ids);
+    return hash;
+}
+#endif
 
 bool brain_pool_info(const Brain *b, int pool_index, BrainPoolInfo *out) {
     if (!b || !out || pool_index < 0 || pool_index >= NPOOLS) return false;

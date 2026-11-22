@@ -168,3 +168,36 @@ O codificador ativo e `main.c` agora alimentam **58 de 64 canais**. Há fonte ex
 `brain_create` rejeita nomes duplicados ou ausentes, grupos vazios, peso/taxa não finitos, pesos zerados e densidades fora de (0,1]. A criação exige cobertura exata de 1.048.576 IDs. `brain_pool_info` fornece nome, início, tamanho e classe; `brain_synapse_count` expõe a quantidade CSR criada. As 201 regras têm referências válidas; o número de sinapses é determinado pelo amostrador limitado por projeção.
 
 A construção usa metadados `exc`/`inh`, mas o runtime não aplica sinal de Dale automaticamente; sinais inibitórios são pesos negativos explícitos. Rever isso antes de congelar os perfis.
+
+## Auditoria de uso no runtime
+
+### Entrada sensorial
+
+`sensors_poll()` em [`sensors.c`](../../sensors.c) codifica a maior parte dos eventos/interocepção. `src/main.c` completa `CPU_LOAD`, `TEMP_WARM`, `TEMP_COLD` e `NOISE` a partir de módulos que rodam no ciclo principal. Os 58 canais com algum produtor observável e os seis sem fonte confiável são:
+
+| Faixa | Conteúdo atualmente alimentado | Limite conhecido |
+|---|---|---|
+| 0–15 | Digitação, classes de tecla, pausa/ociosidade e rajada | Apenas teclas entregues à janela do aplicativo; não é hook global de teclado. `SHIFT` não é distinguido. |
+| 16–31 | Clique/arraste/carinho/cutucada/voz e ruído | Interação com o mascote/app, não um sensor global do desktop. |
+| 32–39 | Hora simulada, uptime da sessão, CPU, foco/ociosidade e duração | Tempo deriva da sessão do app; CPU é amostrado em intervalo. |
+| 40–47 | Temperatura, presença local, clique e padrão de entrada | Presença é inferida da posição/atividade do cursor na janela do app. |
+| 48–63 | Circadiano/interocepção, drives, neuromoduladores, memória e recompensa | Muitos canais são valores internos sintéticos/derivados; não representam sensores biomédicos nem uma memória de leitura de tela. |
+
+`MUSIC` tem um detector em `SenseMusic` mas a atualização dele não entra no ciclo principal; `SHIFT`, `HELP_REQ`, `CLEAN`, `CALL` e `WHISTLE` não têm produtor implementado. Não há OCR geral da tela, monitoramento genérico de arquivos/processos/rede nem hook global de mouse/teclado.
+
+### Associativos
+
+Todos os 32 pools recebem estado LIF individual e as regras declaradas em `DEFAULT_CONNS`; cada pre associativo também ganha projeções locais amostradas para os outros 31 pools associativos. A tabela `exc/inh` é descritiva; o sentido efetivo está no sinal do peso. O consumidor ativo das taxas associativas é `behavior_update`/`behavior_update_emotion`, mais telemetria/ontogenia; não existe planner desktop nem filtro LLM ligado ao ciclo.
+
+### Saídas motoras atuais
+
+`brain_motor()` retorna taxa por pool; consumidores estão em comportamento, animação, voz ou movimento da janela do mascote. Nenhum grupo envia input arbitrário do sistema operacional.
+
+| IDs | Consumidor identificado | Situação |
+|---|---|---|
+| 96–104 | Expressão facial em `src/animation/animation.c` e `src/animation/emotions.c` | Ligado a animação do organismo virtual. |
+| 105–107 | Voz/purr em `src/main.c`, comportamento/animação | Só emissão acústica local do mascote. |
+| 108–109 | `src/animation/autonomy.c` e `behavior.c` | Movimento do mascote na janela. |
+| 110–119 | `src/main.c`, `behavior.c`, `autonomy.c`, sintetizador e gestos da janela | Ações virtuais; parte dos índices não tem consumidor dedicado em todo caminho. |
+
+O mapeamento-alvo desktop que reaproveita os mesmos 120 slots e a lista de capacidades ainda sem produtor ficam em [`MAPA_GRUPOS_DESKTOP.md`](MAPA_GRUPOS_DESKTOP.md). Essa proposta não altera a tabela ativa nem a persistência até haver migração e validação.

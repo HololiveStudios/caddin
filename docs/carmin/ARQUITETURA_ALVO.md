@@ -1,6 +1,6 @@
 # Carmin — Arquitetura-alvo e decisões pendentes
 
-**Estado:** proposta inicial para validação; não é contrato congelado.
+**Estado:** proposta em validação; baseline inicial disponível em um host, contratos ainda não congelados.
 **Atualizado:** 2026-11-22
 
 ## 1. Definição operacional do alvo
@@ -25,7 +25,7 @@ O plano deve distinguir quatro custos: estado por unidade, conectividade/estado 
 
 O runtime usado por `src/main.c` configura 1.048.576 unidades nos 120 grupos existentes, multiplicador 512 sobre os perfis-base. A montagem gera conectividade CSR limitada a 64 saídas por unidade e sem matriz `N×NL`. A distribuição e os parâmetros dos grupos estão em [Inventário dos grupos](INVENTARIO_GRUPOS.md). O caminho legado de carregamento mantém apenas pesos que coincidem com projeções da topologia ativa.
 
-Essa alteração configura a escala-alvo e seus estados individuais; ela ainda não comprova taxa de tempo real ou utilidade comportamental na escala. O passo LIF continua percorrendo densamente todas as 786.432 unidades não sensoriais, e a atualização sensorial percorre 262.144 unidades por milissegundo simulado. O próximo gargalo é implementar atualização esparsa/lazy e medir RSS/CPU/latência antes de divulgar desempenho.
+Essa configuração dá estado individual a todas as unidades; por si só, não comprova utilidade comportamental. O passo LIF foi alterado para integrar alvos que receberam eventos e avançar células silenciosas de forma lazy. Uma referência densa e cenários reproduzíveis estão em [`BASELINE.md`](BASELINE.md): carga média mede 3,15 ms para `brain_step(16 ms)`, e carga alta 18,92 ms neste host. Isso não comprova tempo real geral; equivalência numérica extensa, aprendizado no loop completo e segunda máquina seguem em aberto.
 
 Os dois grupos funcionais novos ocupam os antigos slots genéricos `PLASTIC_NODE1/2` para manter IDs e formato de estado ontogenético estáveis. Grupos `exc/inh` são metadados; conexões inibitórias continuam representadas pelo sinal explícito dos pesos. Essa convenção ainda precisa de decisão se Dale for adotada como regra rígida.
 
@@ -61,7 +61,7 @@ Usando o cálculo ilustrativo de 1.048.576 unidades e 64 sinapses médias por un
 - A SDM descrita no blueprint (65.536 × (256 B de endereço + 2.048 B de contadores)) ocupa ~151 MB decimais (~144 MiB), sem metadados e alinhamentos. A implementação presente declara 128 localizações.
 - Um buffer denso de atraso `D × N × sizeof(fix16_t)` cresce rapidamente. Para `D=8`, `N=1.048.576` isso representa 16 MiB. Deve comparar-se com filas de entrega esparsas.
 
-Não há ainda uma estimativa confiável de CPU, RAM residente, armazenamento ou latência do Carmin nessa escala. Os orçamentos passam a ser compromissos apenas após benchmark em hardware-alvo especificado, com perfil de atividade, densidade e carga de aprendizado publicados.
+Há uma baseline inicial de CPU temporal e RSS do processo nesta máquina em [`BASELINE.md`](BASELINE.md), mas não é representativa de todos os dispositivos. A carga alta foi medida acima do período de 16 ms, e o passo de aprendizado deve ser contado junto ao runtime. Os orçamentos só passam a ser compromissos após benchmarks em hardware-alvo adicional, com perfil de atividade, densidade e carga de aprendizado publicados.
 
 ## 5. Tecnologia de referência, não dependência inicial
 

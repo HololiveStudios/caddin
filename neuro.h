@@ -19,6 +19,20 @@ typedef struct {
     BrainPoolKind kind;
 } BrainPoolInfo;
 
+typedef struct {
+    uint64_t elapsed_ns;
+    uint64_t sensory_ns;
+    uint64_t propagation_ns;
+    uint64_t integration_ns;
+    uint64_t dense_neuron_updates; /* visitas que o kernel denso faria */
+    uint64_t neuron_updates;       /* unidades efetivamente integradas */
+    uint64_t sensory_updates;
+    uint64_t sensory_proposals;
+    uint64_t synapses_traversed;
+    uint64_t sensory_spikes_emitted;
+    uint64_t spikes_emitted;
+} BrainStepStats;
+
 Brain *brain_create(unsigned int seed, const char *temperament);
 void brain_destroy(Brain *brain);
 void brain_stimulate(Brain *brain, const double values[PESTINHA_CHANNELS]);
@@ -43,5 +57,10 @@ double brain_pool_rate(const Brain *brain, int pool_index);
 int    brain_pool_count(void);  /* retorna NPOOLS */
 bool   brain_pool_info(const Brain *brain, int pool_index, BrainPoolInfo *out);
 uint32_t brain_synapse_count(const Brain *brain);
+bool brain_step_stats(const Brain *brain, BrainStepStats *out);
+#ifdef BRAIN_STEP_STATS_AVAILABLE
+/* For benchmark builds: materialize lazy state and hash logical state at a fixed tolerance. */
+uint64_t brain_bench_state_hash(Brain *brain);
+#endif
 
 #endif /* PESTINHA_NEURO_H */

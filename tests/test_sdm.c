@@ -60,6 +60,57 @@ int main(void) {
     assert(sim_noisy > 0.70f);
     printf("  -> Similaridade com endereço ruidoso (pista parcial): %.2f%%\n", sim_noisy * 100.0f);
 
+    /* A API tipada distingue memória vazia de uma associação válida ao vetor zero. */
+    SparseDistributedMemory typed_memory;
+    sdm_init(&typed_memory, 77);
+    SdmAssociation association;
+    assert(sdm_association_recall(&typed_memory, addr1, &association));
+    assert(!association.valid);
+    sdm_association_store(&typed_memory, addr1, hv_zero());
+    assert(sdm_association_recall(&typed_memory, addr1, &association));
+    assert(association.valid);
+    assert(hv_hamming_dist(association.value, hv_zero()) == 0);
+
+    SdmEpisodeIndex episode_index;
+    sdm_episode_index_init(&episode_index);
+    SdmEpisodeRecall episode_recall;
+    assert(sdm_episode_index_recall(&episode_index, addr1, &episode_recall));
+    assert(!episode_recall.valid);
+    assert(sdm_episode_index_store(&episode_index, addr1, hv_zero()));
+    assert(sdm_episode_index_recall(&episode_index, addr1, &episode_recall));
+    assert(episode_recall.valid && episode_recall.similarity == 1.0f);
+    assert(hv_hamming_dist(episode_recall.value, hv_zero()) == 0);
+    Hypervector changed_outcome = hv_random(&s_data);
+    assert(sdm_episode_index_store(&episode_index, addr1, changed_outcome));
+    assert(sdm_episode_index_recall(&episode_index, addr1, &episode_recall));
+    assert(hv_hamming_dist(episode_recall.value, changed_outcome) == 0);
+    sdm_episode_index_consolidate(&episode_index);
+    assert(episode_index.count == 1); /* associação repetida sobrevive ao sono */
+    assert(sdm_episode_index_recall(&episode_index, addr1, &episode_recall));
+    assert(episode_recall.valid && hv_hamming_dist(episode_recall.value, changed_outcome) == 0);
+    for (unsigned i = 0; i < SDM_EPISODE_CAPACITY - 1u; ++i) {
+        Hypervector other_key = hv_random(&s_addr);
+        Hypervector other_value = hv_random(&s_data);
+        (void)sdm_episode_index_store(&episode_index, other_key, other_value);
+    }
+    assert(episode_index.count <= SDM_EPISODE_CAPACITY);
+    sdm_episode_index_consolidate(&episode_index);
+    Hypervector overflow_key = hv_random(&s_addr);
+    assert(sdm_episode_index_store(&episode_index, overflow_key, changed_outcome));
+    assert(episode_index.count <= SDM_EPISODE_CAPACITY);
+    static uint8_t episode_buf[20 + sizeof(episode_index.next_slot) + sizeof(episode_index.count) +
+                               sizeof(episode_index.episodes)];
+    size_t episode_size = sdm_episode_index_serialize(&episode_index, episode_buf,
+                                                       sizeof(episode_buf));
+    assert(episode_size == sizeof(episode_buf));
+    SdmEpisodeIndex episode_loaded;
+    sdm_episode_index_init(&episode_loaded);
+    assert(sdm_episode_index_deserialize(&episode_loaded, episode_buf, episode_size));
+    assert(sdm_episode_index_recall(&episode_loaded, addr1, &episode_recall));
+    assert(episode_recall.valid && hv_hamming_dist(episode_recall.value, changed_outcome) == 0);
+    episode_buf[episode_size / 2] ^= 1;
+    assert(!sdm_episode_index_deserialize(&episode_loaded, episode_buf, episode_size));
+
     /* 3. Teste de codificação de episódios */
     EpisodeDescriptor ep1 = {
         .window_name = "code - main.c",
@@ -81,12 +132,12 @@ int main(void) {
     (void)ep_vec_diff;
 
     /* 4. Teste de serialização / desserialização */
-    static uint8_t buf[sizeof(sdm.counters) + 64];
+    static uint8_t buf[sizeof(sdm.address) + sizeof(sdm.counters) + 128];
     size_t sz = sdm_serialize(&sdm, buf, sizeof(buf));
     assert(sz > 0);
 
     static SparseDistributedMemory sdm2;
-    sdm_init(&sdm2, 42);
+    sdm_init(&sdm2, 99); /* SDM2 precisa restaurar também os endereços. */
     bool des_ok = sdm_deserialize(&sdm2, buf, sz);
     assert(des_ok == true);
     (void)des_ok;
@@ -95,6 +146,27 @@ int main(void) {
     ok = sdm_recall(&sdm2, addr1, &recalled_from_loaded);
     assert(ok == true);
     assert(hv_similarity(recalled_from_loaded, data1) > 0.85f);
+
+    /* Conteúdo truncado, extra, checksum inválido e schema errado são recusados sem mutação. */
+    SparseDistributedMemory before_bad_load = sdm2;
+    assert(!sdm_deserialize(&sdm2, buf, sz - 1));
+    assert(!sdm_deserialize(&sdm2, buf, sz + 1));
+    buf[sz / 2] ^= 1;
+    assert(!sdm_deserialize(&sdm2, buf, sz));
+    buf[sz / 2] ^= 1;
+    assert(memcmp(&sdm2, &before_bad_load, sizeof(sdm2)) == 0);
+
+    /* SDM1 é aceito apenas como legado; endereços determinísticos vêm do init do chamador. */
+    static uint8_t legacy_buf[sizeof(uint32_t) + sizeof(sdm.counters)];
+    uint32_t legacy_magic = 0x53444D31u;
+    memcpy(legacy_buf, &legacy_magic, sizeof(legacy_magic));
+    memcpy(legacy_buf + sizeof(legacy_magic), sdm.counters, sizeof(sdm.counters));
+    SparseDistributedMemory legacy;
+    sdm_init(&legacy, 42);
+    bool was_legacy = false;
+    assert(sdm_deserialize_compatible(&legacy, legacy_buf, sizeof(legacy_buf), &was_legacy));
+    assert(was_legacy);
+    assert(memcmp(legacy.address, sdm.address, sizeof(sdm.address)) == 0);
 
     /* 5. Teste de consolidação no sono */
     sdm_consolidate_sleep(&sdm2);

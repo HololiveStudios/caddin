@@ -30,6 +30,8 @@
 #include "core/sdm.h"
 #include "core/rituals.h"
 #include "core/event_ring.h"
+#include "core/cognitive_event.h"
+#include "core/carmin_snapshot.h"
 #include "core/bandit.h"
 #include "core/daily_summary.h"
 #include "core/telemetry_fifo.h"
@@ -80,6 +82,8 @@ static void handle_sig(int sig) {
 
 #if defined(_WIN32)
 #  include <windows.h>
+#  include <io.h>
+#  include <fcntl.h>
 static void sleep_ms(int ms) { Sleep(ms); }
 static double now_seconds(void) {
     static LARGE_INTEGER freq;
@@ -94,6 +98,7 @@ static double now_seconds(void) {
 }
 #elif defined(__unix__) || defined(__APPLE__)
 #  include <unistd.h>
+#  include <fcntl.h>
 static void sleep_ms(int ms) {
     struct timespec ts = { ms/1000, (long)(ms%1000)*1000000L };
     nanosleep(&ts, NULL);
@@ -113,6 +118,7 @@ static double now_seconds(void) { return (double)clock() / CLOCKS_PER_SEC; }
 #define BRAIN_FILE_LEGACY "cortex_pet.brain"
 #define ONTO_FILE         "caddin.onto"
 #define SDM_FILE          "caddin.sdm"
+#define EPISODE_FILE      "caddin.episodes"
 
 /* Intervalo de auto-save (em segundos) */
 #define AUTOSAVE_INTERVAL 60.0
@@ -124,13 +130,19 @@ static void sdm_save_state(const SparseDistributedMemory *sdm, const char *path)
     FILE *f = fopen(tmp, "wb");
     if (!f) return;
 
-    static uint8_t sdm_buf[sizeof(sdm->counters) + 64];
+    static uint8_t sdm_buf[sizeof(sdm->address) + sizeof(sdm->counters) + 128];
     size_t sz = sdm_serialize(sdm, sdm_buf, sizeof(sdm_buf));
-    if (sz > 0) {
-        fwrite(sdm_buf, 1, sz, f);
+    bool ok = sz > 0 && fwrite(sdm_buf, 1, sz, f) == sz && fflush(f) == 0;
+#ifdef _WIN32
+    if (ok) ok = _commit(_fileno(f)) == 0;
+#else
+    if (ok) ok = fsync(fileno(f)) == 0;
+#endif
+    if (fclose(f) != 0) ok = false;
+    if (!ok) {
+        remove(tmp);
+        return;
     }
-    fflush(f);
-    fclose(f);
 
 #ifdef _WIN32
     MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
@@ -144,11 +156,60 @@ static bool sdm_load_state(SparseDistributedMemory *sdm, const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) return false;
 
-    static uint8_t sdm_buf[sizeof(sdm->counters) + 64];
+    static uint8_t sdm_buf[sizeof(sdm->address) + sizeof(sdm->counters) + 128];
     size_t read_bytes = fread(sdm_buf, 1, sizeof(sdm_buf), f);
+    bool read_ok = !ferror(f) && feof(f);
     fclose(f);
+    if (!read_ok) return false;
 
-    return sdm_deserialize(sdm, sdm_buf, read_bytes);
+    bool legacy_format = false;
+    bool ok = sdm_deserialize_compatible(sdm, sdm_buf, read_bytes, &legacy_format);
+    if (ok && legacy_format) {
+        /* SDM1 omitia os endereços das localizações; sua associação não é recuperável.
+         * Inicializa estado vazio determinístico em vez de parear contadores com endereços errados. */
+        sdm_init(sdm, 0x1337BEEF);
+    }
+    return ok;
+}
+
+static bool episode_index_save_state(const SdmEpisodeIndex *index, const char *path) {
+    if (!index || !path) return false;
+    char tmp[512];
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) return false;
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return false;
+    static uint8_t buffer[16 + sizeof(uint32_t) * 2u +
+                          sizeof(((SdmEpisodeIndex *)0)->episodes)];
+    size_t size = sdm_episode_index_serialize(index, buffer, sizeof(buffer));
+    bool ok = size > 0 && fwrite(buffer, 1, size, f) == size && fflush(f) == 0;
+#ifdef _WIN32
+    if (ok) ok = _commit(_fileno(f)) == 0;
+#else
+    if (ok) ok = fsync(fileno(f)) == 0;
+#endif
+    if (fclose(f) != 0) ok = false;
+    if (!ok) { remove(tmp); return false; }
+#ifdef _WIN32
+    if (!MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        remove(tmp);
+        return false;
+    }
+#else
+    if (rename(tmp, path) != 0) { remove(tmp); return false; }
+#endif
+    return true;
+}
+
+static bool episode_index_load_state(SdmEpisodeIndex *index, const char *path) {
+    if (!index || !path) return false;
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    static uint8_t buffer[16 + sizeof(uint32_t) * 2u +
+                          sizeof(((SdmEpisodeIndex *)0)->episodes)];
+    size_t size = fread(buffer, 1, sizeof(buffer), f);
+    bool ok = !ferror(f) && feof(f);
+    fclose(f);
+    return ok && sdm_episode_index_deserialize(index, buffer, size);
 }
 
 #define BANDIT_FILE "caddin.bandit"
@@ -463,6 +524,11 @@ int main(void) {
     } else {
         printf("[SDM] Memória episódica inicializada (Tabula Rasa distribuída)\n");
     }
+    static SdmEpisodeIndex episode_memory;
+    sdm_episode_index_init(&episode_memory);
+    if (episode_index_load_state(&episode_memory, EPISODE_FILE))
+        printf("[MEMORY] Índice episódico carregado: %s (%u episódios)\n",
+               EPISODE_FILE, episode_memory.count);
 
     /* ── Elegibilidade Estendida, Bandit Dopaminérgico e Fadiga ── */
     EventRingBuffer event_ring;
@@ -620,6 +686,24 @@ int main(void) {
     double last_save_t = 0.0;
     double sleep_accum_s = 0.0;
     uint32_t current_tick = 0;
+    uint64_t event_sequence = 1;
+    uint64_t snapshot_sequence = 1;
+    CarminEventSource event_sources[PESTINHA_CHANNELS];
+    uint32_t event_flags[PESTINHA_CHANNELS];
+    for (int c = 0; c < PESTINHA_CHANNELS; ++c) {
+        event_sources[c] = c < 32 ? CARMIN_SOURCE_APP_ENCODER : CARMIN_SOURCE_INTERNAL_STATE;
+        event_flags[c] = CARMIN_EVENT_AVAILABLE;
+    }
+    event_sources[CH_CPU_LOAD] = CARMIN_SOURCE_SYSTEM_MONITOR;
+    event_sources[CH_TEMP_WARM] = CARMIN_SOURCE_SYSTEM_MONITOR;
+    event_sources[CH_TEMP_COLD] = CARMIN_SOURCE_SYSTEM_MONITOR;
+    event_sources[CH_NOISE] = CARMIN_SOURCE_MICROPHONE;
+    const int unavailable_channels[] = {CH_SHIFT, CH_HELP_REQ, CH_CLEAN, CH_CALL, CH_WHISTLE, CH_MUSIC};
+    for (size_t i = 0; i < sizeof(unavailable_channels) / sizeof(unavailable_channels[0]); ++i) {
+        int c = unavailable_channels[i];
+        event_sources[c] = CARMIN_SOURCE_UNKNOWN;
+        event_flags[c] = CARMIN_EVENT_UNAVAILABLE;
+    }
 
     while (g_running && !window_should_close(win)) {
 
@@ -951,6 +1035,9 @@ int main(void) {
         }
         if (sense_mic.available && sense_mic_is_loud(&sense_mic)) {
             inputs[CH_NOISE] = fmax(inputs[CH_NOISE], 0.80);
+            event_sources[CH_NOISE] = CARMIN_SOURCE_MICROPHONE;
+        } else {
+            event_sources[CH_NOISE] = CARMIN_SOURCE_APP_ENCODER;
         }
 
         /* Aplica ganho sensorial modulado pela Noradrenalina */
@@ -961,7 +1048,15 @@ int main(void) {
             if (inputs[i] > 1.0) inputs[i] = 1.0;
         }
 
-        brain_stimulate(brain, inputs);
+        CarminEvent event_batch[CARMIN_EVENT_BATCH_CAPACITY];
+        double event_inputs[PESTINHA_CHANNELS];
+        uint64_t event_timestamp_ns = (uint64_t)(sim_t * 1000000000.0);
+        size_t event_count = carmin_events_encode_channels(inputs, event_sources, event_flags,
+                                                           event_sequence, event_timestamp_ns, event_batch);
+        event_sequence += event_count;
+        if (!carmin_events_decode_channels(event_batch, event_count, event_timestamp_ns, 0, event_inputs))
+            memset(event_inputs, 0, sizeof(event_inputs));
+        brain_stimulate(brain, event_inputs);
         brain_step(brain, dt * 1000.0);
 
         /* Passo do CPG (Respiração biológica e batimento) */
@@ -988,6 +1083,22 @@ int main(void) {
             }
 
             onto_tick_1hz(&ontogeny, pool_err, pool_act, neuromod.ne);
+
+            /* Snapshot escalar somente leitura para telemetria/replay diagnóstico. */
+            double pool_snapshot[120];
+            for (int p = 0; p < 120; ++p) pool_snapshot[p] = brain_pool_rate(brain, p);
+            BrainStepStats step_stats = {0};
+            (void)brain_step_stats(brain, &step_stats);
+            CarminTelemetrySnapshot snapshot;
+            uint32_t active_units = step_stats.neuron_updates > UINT32_MAX ? UINT32_MAX :
+                                    (uint32_t)step_stats.neuron_updates;
+            if (carmin_snapshot_capture(pool_snapshot, PESTINHA_NEURONS,
+                                        (uint32_t)brain_active_spike_count(brain),
+                                        step_stats.synapses_traversed, active_units,
+                                        snapshot_sequence++, (uint64_t)(sim_t * 1e9), &snapshot)) {
+                snapshot.flags = 1u; /* telemetria read-only capturada; publicação externa pendente */
+                (void)snapshot;
+            }
 
             /* Curiosidade por Progresso de Compressão (Schmidhuber) */
             static int prev_mean_err = -1;
@@ -1340,6 +1451,7 @@ int main(void) {
             brain_save(brain, BRAIN_FILE);
             onto_save_state(&ontogeny, &imprint, ONTO_FILE);
             sdm_save_state(&sdm_memory, SDM_FILE);
+            (void)episode_index_save_state(&episode_memory, EPISODE_FILE);
             bandit_save_state(&bandit, BANDIT_FILE);
             keys_save_state(&sense_keystroke, KEYS_FILE);
             last_save_t = sim_t;
@@ -1354,6 +1466,7 @@ int main(void) {
     brain_save(brain, BRAIN_FILE);
     onto_save_state(&ontogeny, &imprint, ONTO_FILE);
     sdm_save_state(&sdm_memory, SDM_FILE);
+    (void)episode_index_save_state(&episode_memory, EPISODE_FILE);
     bandit_save_state(&bandit, BANDIT_FILE);
     keys_save_state(&sense_keystroke, KEYS_FILE);
     daily_summary_append_file(&daily_summary, DAILY_LOG);
