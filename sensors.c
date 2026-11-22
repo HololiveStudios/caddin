@@ -1,31 +1,10 @@
 #include "sensors.h"
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
-/* ── Índices dos 64 canais sensoriais (de network_data.h) ── */
-enum {
-    CH_TYPING = 0, CH_KEY_FAST, CH_KEY_SLOW, CH_IDLE, CH_PAUSE,
-    CH_CMD_ENTER, CH_BACKSPACE, CH_DELETE, CH_ARROW, CH_TAB,
-    CH_SPACE, CH_SHIFT, CH_ALPHANUM, CH_NUMERIC, CH_SYMBOL, CH_PUNCTUATION,
-
-    CH_CARESS, CH_POKE, CH_FEED, CH_TALK, CH_GREET, CH_IGNORE,
-    CH_REWARD, CH_PUNISH, CH_HELP_REQ, CH_CLEAN, CH_PLAY,
-    CH_SLEEP_REQ, CH_CALL, CH_WHISTLE, CH_MUSIC, CH_NOISE,
-
-    CH_TIME_DAY, CH_TIME_NIGHT, CH_UPTIME, CH_CPU_LOAD,
-    CH_IDLE_LONG, CH_FOCUS_ACTIVE, CH_SESSION_LEN, CH_TICK_PULSE,
-    CH_TEMP_WARM, CH_TEMP_COLD, CH_USER_PRESENT, CH_USER_AWAY,
-    CH_QUICK_CLICK, CH_SLOW_CLICK, CH_BURST_INPUT, CH_RHYTHM_REGULAR,
-
-    CH_CIRCADIAN_PEAK, CH_CIRCADIAN_LOW, CH_FATIGUE_PULSE,
-    CH_HUNGER_PULSE, CH_HEARTBEAT_FAST, CH_HEARTBEAT_SLOW,
-    CH_BREATHING, CH_ADRENALINE, CH_DOPAMINE, CH_SEROTONIN,
-    CH_CORTISOL, CH_OXYTOCIN, CH_ENDORPHIN, CH_MEMORY_TRACE,
-    CH_STDP_SPIKE, CH_REWARD_WAIT
-};
 
 struct Sensors {
     /* ── Teclas e digitação ── */
@@ -218,6 +197,11 @@ void sensors_poll(Sensors *s, double now_t, SensorReading *reading, double input
 
     if (!s) return;
 
+    /* Pausa curta: separa uma pausa de trabalho de ociosidade prolongada. */
+    if (idle >= 1.0 && idle < 5.0) {
+        inputs[CH_PAUSE] = fmin(1.0, (idle - 1.0) / 4.0);
+    }
+
     /* ═══════════════════════════════════════════════════════
      * BLOCO A: Canais Exteroceptivos (Interação de Hardware)
      * ═══════════════════════════════════════════════════════ */
@@ -235,6 +219,9 @@ void sensors_poll(Sensors *s, double now_t, SensorReading *reading, double input
     /* Mapeia teclas específicas nos seus canais */
     if (s->last_key != 0 && idle < 0.3) {
         switch (s->last_key) {
+        case '\b':  inputs[CH_BACKSPACE] = 0.80; break;
+        case 0x7f:  inputs[CH_DELETE] = 0.80; break;
+        case '\t':  inputs[CH_TAB] = 0.75; break;
         case '\n':  inputs[CH_CMD_ENTER] = 0.90; break;
         case ' ':   inputs[CH_SPACE]     = 0.80; break;
         case (char)0x80: case (char)0x81:
@@ -245,6 +232,10 @@ void sensors_poll(Sensors *s, double now_t, SensorReading *reading, double input
                 inputs[CH_ALPHANUM] = 0.70;
             else if (s->last_key >= '0' && s->last_key <= '9')
                 inputs[CH_NUMERIC] = 0.70;
+            else if (isprint((unsigned char)s->last_key) && ispunct((unsigned char)s->last_key)) {
+                if (strchr("!@#$%^&*+=|\\/~", s->last_key)) inputs[CH_SYMBOL] = 0.65;
+                else inputs[CH_PUNCTUATION] = 0.65;
+            }
             break;
         }
     }

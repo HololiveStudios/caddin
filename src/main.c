@@ -942,6 +942,17 @@ int main(void) {
         SensorReading sr = {0};
         sensors_poll(sensors, sim_t, &sr, inputs);
 
+        /* Canales explícitos para métricas del sistema que ya son muestreadas. */
+        if (sense_sysload.last_update > -1000.0) {
+            inputs[CH_CPU_LOAD] = fix_to_float(sense_sysload_get_cpu(&sense_sysload));
+            float cpu_temp = fix_to_float(sense_sysload_get_temp(&sense_sysload));
+            inputs[CH_TEMP_WARM] = fmax(0.0, fmin(1.0, (cpu_temp - 0.55) * 2.0));
+            inputs[CH_TEMP_COLD] = fmax(0.0, fmin(1.0, (0.25 - cpu_temp) * 4.0));
+        }
+        if (sense_mic.available && sense_mic_is_loud(&sense_mic)) {
+            inputs[CH_NOISE] = fmax(inputs[CH_NOISE], 0.80);
+        }
+
         /* Aplica ganho sensorial modulado pela Noradrenalina */
         fix16_t sens_gain = neuromod_get_sensory_gain(&neuromod);
         float f_gain = fix_to_float(sens_gain);

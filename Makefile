@@ -1,3 +1,6 @@
+VERSION ?= 1.5.0
+PRODUCT ?= carmin
+
 .PHONY: all clean run windows android apk test dist
 
 all:
@@ -53,12 +56,12 @@ apk:
 	@echo "[APK] APK com overlay flutuante gerado com sucesso: dist/caddin-v1.4.0.apk"
 
 dist: all windows
-	@rm -rf dist
+	@rm -rf dist/caddin-linux-x86_64 dist/caddin-windows-x86_64
 	@mkdir -p dist/caddin-linux-x86_64 dist/caddin-windows-x86_64
 	@cp build/caddin build/caddin_monitor .caddinrc.example README.md dist/caddin-linux-x86_64/
 	@cp build-windows/caddin.exe build-windows/caddin_monitor.exe .caddinrc.example README.md dist/caddin-windows-x86_64/
-	@tar -czf dist/caddin-v1.4.0-linux-x86_64.tar.gz -C dist caddin-linux-x86_64
-	@cd dist && zip -r caddin-v1.4.0-windows-x86_64.zip caddin-windows-x86_64
+	@tar -czf dist/$(PRODUCT)-v$(VERSION)-linux-x86_64.tar.gz -C dist caddin-linux-x86_64
+	@cd dist && zip -r $(PRODUCT)-v$(VERSION)-windows-x86_64.zip caddin-windows-x86_64
 	@echo "[DEPLOY] Pacotes gerados em dist/"
 
 clean:

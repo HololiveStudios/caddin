@@ -1,13 +1,14 @@
 <div align="center">
 
-# 🐾 Caddin — Organismo Virtual Sintético v1.4.0
-### Mascote Autônomo para Desktop com SNN de 2048 Neurônios, Ontogenia Biológica, Memória Hiperdimensional SDM, Bandit Dopaminérgico UCB1, Percepção Multimodal e Telemetria em C11 Puro
+# 🧠 Carmin — Organismo Digital Autônomo v1.5.0
+<sub>Repositório e executáveis ainda preservam o nome histórico Caddin.</sub>
+### Runtime C11 com rede LIF configurada para 1.048.576 unidades, 120 grupos, conectividade CSR limitada, sensores de desktop, SDM e ontogenia
 
 [![Linguagem](https://img.shields.io/badge/Linguagem-C11%20Puro%20(Zero%20Python)-blue.svg)](#)
-[![RAM](https://img.shields.io/badge/Consumo%20RAM-~12%20MB-brightgreen.svg)](#)
-[![Alocação](https://img.shields.io/badge/Alocação-Zero%20Malloc%20no%20Loop-orange.svg)](#)
+[![Escala configurada](https://img.shields.io/badge/Unidades-1.048.576-brightgreen.svg)](#)
+[![Conectividade](https://img.shields.io/badge/CSR-máximo%2064%20saídas%2Funidade-orange.svg)](#)
 [![Aritmética](https://img.shields.io/badge/Aritmética-Ponto%20Fixo%20Q8.8%20%2F%20Q0.32-purple.svg)](#)
-[![Testes](https://img.shields.io/badge/Testes-13%2F13%20Aprovados%20(100%25)-success.svg)](#)
+[![Validação](https://img.shields.io/badge/Tempo%20real-não%20medido-lightgrey.svg)](#)
 [![Plataformas](https://img.shields.io/badge/Plataformas-Linux%20(X11%20%2B%20ALSA)%20%7C%20Windows%20(GDI%20%2B%20WinMM)-blueviolet.svg)](#)
 [![Licença](https://img.shields.io/badge/Licença-MIT%20Open%20Experimental-lightgrey.svg)](#)
 
@@ -17,9 +18,11 @@
 
 ## 📖 Apresentação
 
-O **Caddin** é um companheiro virtual vivo para desktop projetado como uma **simulação neurobiológica contínua e autônoma** em tempo real a 60 FPS. Diferente de mascotes convencionais que executam scripts de animação pré-renderizados ou agentes LLM em nuvem, o Caddin é um **organismo sintético guiado por disparos de potenciais de ação (spikes)** em uma rede neural de 2048 neurônios biológicos acoplada à dinâmica de 5 neuromoduladores endógenos, física elástica de corpo mole deformável (softbody), audição procedural, visão contextual do fluxo de trabalho do usuário e ontogenia com maturação corporal e vocal.
+**Carmin** é a identidade do produto em evolução deste repositório Caddin. O runtime atual combina sensores do desktop, um modelo LIF e camadas de memória, ontogenia, homeostase e comportamento, com backends Linux/X11 e Windows. A SNN ativa está configurada para **1.048.576 unidades em 120 grupos**: 262.144 sensoriais, 589.824 associativas e 196.608 motoras. A conectividade é montada diretamente em CSR, com no máximo 64 conexões de saída por unidade.
 
-Desenvolvido estritamente em **C11 nativo sem alocação dinâmica no laço principal** e com aritmética de ponto fixo determinística (`fix16_t` Q8.8 e `brake` Q0.32), o programa consome apenas **~12 MB de memória RAM**, rodando com fluidez sem necessidade de GPU dedicada, OpenGL, Mesa, LLVM ou bibliotecas pesadas.
+Esse total descreve unidades com estado alocado e IDs em pools; **não é uma alegação de 60 FPS ou tempo real**. O passo neural ainda percorre densamente 262.144 unidades sensoriais e 786.432 unidades associativas/motoras por milissegundo simulado. RSS, CPU, latência, qualidade comportamental e escala ainda precisam ser medidos. A reserva máxima de conectividade pelo teto seria ~67,1 milhões de sinapses; a quantidade construída depende das projeções amostradas.
+
+O caminho ativo usa C11, CSR e vetores de estado no heap. A política atual continua centrada no organismo virtual e nos comportamentos já presentes. Controle geral de mouse/teclado, leitura/escrita arbitrária de arquivos, comandos do shell e ponte com LLM local são objetivos em planejamento, não capacidades que este release declara como prontas.
 
 ---
 
@@ -28,7 +31,7 @@ Desenvolvido estritamente em **C11 nativo sem alocação dinâmica no laço prin
 1. [Início Rápido e Execução](#-início-rápido-e-execução)
 2. [Matriz Completa de Capacidades do Organismo](#-matriz-completa-de-capacidades-do-organismo)
 3. [Arquitetura Neurobiológica em 4 Camadas](#-arquitetura-neurobiológica-em-4-camadas)
-4. [Cérebro SNN de 2048 Neurônios e Topologia Neural](#-cérebro-snn-de-2048-neurônios-e-topologia-neural)
+4. [Cérebro SNN de 1.048.576 Unidades e Topologia Neural](#-cérebro-snn-de-1048576-unidades-e-topologia-neural)
 5. [Ciclo Ontogenético e Janela Crítica de Aprendizado](#-ciclo-ontogenético-e-janela-crítica-de-aprendizado)
 6. [Memória Episódica SDM (Kanerva) & Curiosidade (Schmidhuber)](#-memória-episódica-sdm-kanerva--curiosidade-schmidhuber)
 7. [Bandit Dopaminérgico UCB1 & Detecção de Fadiga Humana](#-bandit-dopaminérgico-ucb1--detecção-de-fadiga-humana)
@@ -43,7 +46,7 @@ Desenvolvido estritamente em **C11 nativo sem alocação dinâmica no laço prin
 16. [Estrutura de Diretórios do Projeto](#-estrutura-de-diretórios-do-projeto)
 17. [Histórico de Versões e Evolução](#-histórico-de-versões-e-evolução)
 18. [Guia de Compilação, Cross-Compile e Deploy](#-guia-de-compilação-cross-compile-e-deploy)
-19. [Suíte de Testes Automatizada (13/13 Aprovadas)](#-suíte-de-testes-automatizada)
+19. [Suíte de Testes Automatizada](#-suíte-de-testes-automatizada)
 20. [Controles, Interações e Atalhos](#-controles-interações-e-atalhos)
 21. [Licença](#-licença)
 
@@ -63,7 +66,7 @@ cd caddin
 # 3. Compilar em modo Release
 make
 
-# 4. Executar a suíte completa de testes unitários (13/13)
+# 4. Executar os testes headless
 make test
 
 # 5. Iniciar o mascote
@@ -72,7 +75,7 @@ make run
 
 ### Monitor de Telemetria em Tempo Real (Terminal Separado, 100% C Puro)
 ```bash
-# Permite assistir a atividade dos 2048 neurônios, ondas de neuromoduladores e fadiga
+# Permite assistir a atividade neural dos grupos ativos, ondas de neuromoduladores e fadiga
 ./build/caddin_monitor
 ```
 
@@ -89,7 +92,7 @@ make windows
 
 | Dimensão | Componente Interno | Funcionamento e Especificação Técnica |
 |---|---|---|
-| **Cérebro Spiking** | 2048 Neurônios LIF | 64 canais sensoriais (512 neurônios), 32 pools associativos (1152 neurônios) e 24 motores (384 neurônios). Sinapses CSR esparsas com R-STDP e STP de Tsodyks-Markram. |
+| **Cérebro Spiking** | 1.048.576 unidades LIF configuradas | 64 grupos sensoriais (262.144), 32 associativos (589.824) e 24 motores (196.608). Conectividade CSR amostrada com teto de 64 saídas por unidade. |
 | **Ontogenia Biológica** | 120 Pools Ontogenéticos | Maturação em 4 estágios (*Filhote, Juvenil, Adulto, Veterano*). Freio da janela crítica com aritmética Q0.32 e cristalização de projeções estáveis para `int8`. |
 | **Memória Episódica** | SDM Hiperdimensional | Sparse Distributed Memory de Kanerva com hipervetores de 2048 bits ($32 \times \text{uint64\_t}$). Conclusão de padrão resistente a ruído e poda sináptica no sono. |
 | **Curiosidade Intrínseca** | Princípio de Schmidhuber | Injeção de dopamina por progresso de compressão temporal ($\Delta \text{err} < -2$). Elevação do drive de exploração quando o ambiente está estagnado. |
@@ -118,10 +121,10 @@ flowchart TD
         M5["Hardware: Carga de CPU, Memória, Temperatura"]
     end
 
-    subgraph C2["CAMADA 2: Cérebro SNN (2048 Neurônios) & CPG"]
-        S1["512 Sensoriais (64 Pools de Entrada)"]
-        S2["1152 Associativos Límbicos e Cognitivos"]
-        S3["384 Motores (Vocalizações, Expressões, Movimento)"]
+    subgraph C2["CAMADA 2: SNN Carmin (1.048.576 unidades) & CPG"]
+        S1["262.144 sensoriais (64 grupos)"]
+        S2["589.824 associativos"]
+        S3["196.608 motores configurados"]
         CPG["Central Pattern Generator (Respiração & Ritmo)"]
     end
 
@@ -133,7 +136,7 @@ flowchart TD
         N5["Ring Buffer de Causalidade (256 Eventos Recentes)"]
     end
 
-    subgraph C4["CAMADA 4: Atuação Física, Vocal & Comportamental"]
+    subgraph C4["CAMADA 4: Saídas do organismo virtual e telemetria"]
         A1["Softbody Físico 2D (Squish, Stretch, Jiggle)"]
         A2["Síntese de Voz Procedural 16 kHz (11 Tipos)"]
         A3["Árvore de Comportamentos: Perch, Hide, Hunt, Dance"]
@@ -149,25 +152,22 @@ flowchart TD
 
 ---
 
-## 🧠 Cérebro SNN de 2048 Neurônios e Topologia Neural
+## 🧠 Cérebro SNN de 1.048.576 Unidades e Topologia Neural
 
-A rede opera a 60 quadros por segundo com neurônios **LIF (Leaky Integrate-and-Fire)** e sinapses esparsas em formato **CSR (Compressed Sparse Row)**:
+A rede usa neurônios **LIF (Leaky Integrate-and-Fire)** e sinapses esparsas em formato **CSR (Compressed Sparse Row)**. O runtime ainda atualiza estados em loops densos; não há medição que confirme 60 FPS nesta escala:
 
-### 1. Canais Sensoriais de Entrada (64 Pools × 8 Neurônios = 512)
-- **Digitação & Ritmo:** `TYPING`, `KEY_FAST`, `KEY_SLOW`, `IDLE`, `PAUSE`, `CMD_ENTER`, `BACKSPACE`, `DELETE`.
-- **Mouse & Físico:** `MOUSE_MOVE`, `MOUSE_FAST`, `MOUSE_SHAKE`, `MOUSE_DRAG`, `CLICK_LEFT`, `CLICK_RIGHT`, `WHEEL_UP`, `WHEEL_DOWN`.
-- **Janelas & Desktop:** `WIN_ACTIVE`, `WIN_SWITCH`, `WIN_MINIMIZE`, `WIN_MAXIMIZE`, `WIN_MOVE`, `WIN_RESIZE`, `WIN_CLOSE_DANGER`.
-- **Hardware & Sistema:** `CPU_HIGH`, `CPU_NORMAL`, `CPU_IDLE`, `TEMP_HOT`, `TEMP_WARM`, `RAM_HEAVY`, `IO_WAIT`.
-- **Ambiente Físico:** `LUMA_DARK`, `LUMA_BRIGHT`, `HEATMAP_DENSE`, `SOUND_LOUD`, `SOUND_QUIET`, `TEXT_NEW_WORD`.
+### 1. Grupos sensoriais (64 × 4.096 = 262.144 unidades)
+Os 64 canais e suas populações-base estão em [`runtime_types.h`](runtime_types.h), [`network_data.h`](network_data.h) e no [inventário detalhado](docs/carmin/INVENTARIO_GRUPOS.md). Incluem digitação, interação, contexto temporal, sinais de sistema, temperatura, presença, biometria e sinais homeostáticos. As fontes disponíveis variam por plataforma; seis canais ainda não têm produtor confiável conectado.
 
-### 2. Interneurônios Associativos (32 Pools × 36 Neurônios = 1152)
-Pools de associação límbica, memória de trabalho e plasticidade:
-- `EMOTION_REG`, `ALERT`, `PLAYFUL`, `RESTING`, `SURPRISED`, `HYPERACTIVE`, `FEAR_RESPONSE`, `REWARD_EXPECT`, `THREAT_DETECT`, `RHYTHM_GEN`, `FOCUS_POOL`, `COGNITIVE_HIGH`, `COGNITIVE_LOW`, `COMFORT_POOL`, `ENERGY_CONSERVE`, `HABITUATION_POOL`.
+### 2. Interneurônios Associativos (32 grupos × 18.432 = 589.824 unidades)
+Pools de associação, memória de trabalho, estados afetivos, foco e controle. A tabela completa dos 32 grupos associativos contém nomes, perfis de dinâmica e projeções; confira o [inventário](docs/carmin/INVENTARIO_GRUPOS.md).
 
-### 3. Motores Comportamentais (24 Pools × 16 Neurônios = 384)
+### 3. Grupos Motores (24 grupos × 8.192 = 196.608 unidades)
 - **Expressão Facial:** `M_FACE_HAPPY`, `M_FACE_SAD`, `M_FACE_SLEEP`, `M_FACE_SURPRISED`, `M_FACE_ANGRY`, `M_FACE_CURIOUS`, `M_FACE_PLAYFUL`, `M_FACE_NEUTRAL`, `M_FACE_WINK`.
 - **Atuação Vocal:** `M_CHIRP_SOUND`, `M_BEEP_PULSE`, `M_PURR_EFFECT`, `M_ALERT_EMIT`, `M_THINK_EMIT`.
-- **Locomoção & Dinâmica:** `M_WANDER_LEFT`, `M_WANDER_RIGHT`, `M_JUMP_ACTION`, `M_DANCE_ACTION`, `M_SLEEP_ACTION`, `M_EAT_ACTION`, `M_NOD_HEAD`, `M_SHAKE_HEAD`, `M_TAIL_WAG`.
+- **Ações e comportamento existentes:** expressão, vocalização, sono, alimentação e movimentos do organismo virtual. Controle arbitrário de mouse/teclado e operações de arquivos/shell não fazem parte do runtime liberado.
+
+A lista completa de nomes, parâmetros, IDs e projeções está em [`docs/carmin/INVENTARIO_GRUPOS.md`](docs/carmin/INVENTARIO_GRUPOS.md). A proposta de reorganizar os 120 grupos para visão ampliada, planejamento desktop e ferramentas/LLM está em planejamento; não é uma capacidade deste release.
 
 ### 4. Neuromoduladores Biológicos
 - **Dopamina (DA):** Sinal de recompensa, novidade e incentivo à exploração.
@@ -300,7 +300,7 @@ Utilitário executável compilado em **C11 puro** (`tools/caddin_monitor.c`):
 - Conecta-se à FIFO `/tmp/caddin_telemetry.fifo` e plota em tempo real com cores ANSI 256:
   - Níveis gráficos de Dopamina, Noradrenalina, Serotonina e Cortisol.
   - Estágio de vida e porcentagem exata do freio ontogenético da janela crítica.
-  - Matriz visual dos 120 pools biológicos da SNN e atividade dos 2048 neurônios a 10 Hz.
+  - Matriz visual dos 120 pools e telemetria dos grupos ativos a 10 Hz.
   - Nível de fadiga e ações ativas do Bandit UCB1.
 
 ---
@@ -376,7 +376,7 @@ caddin/
 ├── cmake/
 │   └── mingw-w64.cmake       # Toolchain para cross-compile Windows
 ├── src/
-│   ├── main.c                # Loop principal (60 FPS, dt fixo, zero malloc)
+│   ├── main.c                # Loop principal e integração do runtime
 │   ├── config.h              # Constantes, física, janelas e limiares
 │   ├── animation/            # animation, autonomy, emotions, softbody
 │   ├── behavior/             # bond, dance, dmn, explore, hide_hunt, perch, startle_relief
@@ -399,9 +399,10 @@ caddin/
 
 ## 📋 Histórico de Versões e Evolução
 
-| Versão | Neurônios | Arquitetura | Destaque |
-|---|---|---|---|
-| **v1.4.0** | **2048** (512 + 1152 + 384) | Ontogenia biológica, SDM 2048b, UCB1, Biometria, Telemetria | Estágios de maturação, Kanerva SDM, curiosidade Schmidhuber, Bandit UCB1, fadiga, rituais, biometria IKD, monitor ANSI em C puro |
+| Versão | Unidades configuradas | Arquitetura | Destaque |
+|---|---:|---|---|
+| **v1.5.0 (Carmin)** | **1.048.576** (262.144 + 589.824 + 196.608) | CSR limitado a 64 saídas/unidade; estados no heap | Escala 512 nos 120 grupos; build Linux/Windows; performance ainda não medida |
+| **v1.4.0** | 2048 (512 + 1152 + 384) | Ontogenia biológica, SDM 2048b, UCB1, Biometria, Telemetria | Estágios de maturação, Kanerva SDM, curiosidade Schmidhuber, Bandit UCB1, fadiga, rituais, biometria IKD, monitor ANSI em C puro |
 | **v1.2.0** | 2048 (512 + 1152 + 384) | SNN escalonada, persistência v2 CRC32, multimodal | Hide/hunt, perch, susto→alívio, microfone e leitura de texto |
 | **v1.1.6** | 1024 (256 + 768) | SNN LIF com CSR escalável a 2048+ | 11 vozes emocionais, `voice_synth_trigger_ex()`, mapeamento por `state_timer` |
 | **v1.1.5** | 1024 | Áudio desacoplado do motor, modulação emocional | Voz ligada às emoções, cooldowns por tipo, fix do reflexo nociceptivo |
@@ -413,25 +414,34 @@ caddin/
 
 ## 🛠️ Guia de Compilação, Cross-Compile e Deploy
 
+### Gerar pacotes de distribuição Linux e Windows
+```bash
+make dist VERSION=1.5.0
+# dist/carmin-v1.5.0-linux-x86_64.tar.gz
+# dist/carmin-v1.5.0-windows-x86_64.zip
+```
+O alvo `dist` preserva outros arquivos existentes em `dist/`, como APKs.
+
 ### Compilação Nativa no Linux:
 ```bash
 make
-make test
+# Também gera build/caddin_monitor
+make test  # executar após instalar dependências de desenvolvimento
 ```
 
 ### Compilação Cruzada para Windows:
 ```bash
 make windows
-# Gera executáveis estáticos e portáteis:
+# Gera executáveis Windows x86_64:
 # build-windows/caddin.exe
 # build-windows/caddin_monitor.exe
 ```
 
 ---
 
-## 🧪 Suíte de Testes Automatizada (13/13 Aprovadas)
+## 🧪 Suíte de Testes Automatizada
 
-O projeto conta com **13 suítes completas de testes automatizados**, cobrindo 100% dos subsistemas neurais, sensoriais e corporais:
+O projeto possui alvos de teste headless em CMake. Execute `make test` para rodá-los. O resultado abaixo é histórico da versão v1.4.0 e não foi revalidado para a nova escala:
 
 ```bash
 cd build && ctest --output-on-failure
@@ -453,7 +463,7 @@ Test project /home/carlos/Antigravity/caddin/build
       Start 12: Fase5Test ........................   Passed    (0.01 sec) [EventRing, UCB1, Fadiga]
       Start 13: Fase6Test ........................   Passed    (0.01 sec) [Biometria, Resumo, Telemetria]
 
-100% tests passed, 0 tests failed out of 13
+100% tests passed, 0 tests failed out of 13 (histórico v1.4.0) (histórico v1.4.0)
 ```
 
 ---

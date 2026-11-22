@@ -5,6 +5,20 @@
 
 typedef struct Brain Brain;
 
+typedef enum {
+    BRAIN_POOL_SENSORY = 0,
+    BRAIN_POOL_EXCITATORY = 1,
+    BRAIN_POOL_INHIBITORY = 2,
+    BRAIN_POOL_MOTOR = 3
+} BrainPoolKind;
+
+typedef struct {
+    const char *name;
+    uint32_t start;
+    uint32_t size;
+    BrainPoolKind kind;
+} BrainPoolInfo;
+
 Brain *brain_create(unsigned int seed, const char *temperament);
 void brain_destroy(Brain *brain);
 void brain_stimulate(Brain *brain, const double values[PESTINHA_CHANNELS]);
@@ -27,5 +41,7 @@ const char *brain_interneuron_name(int index);
 /* Ontogeny: acesso direto às taxas de disparo por pool e à variação plástica */
 double brain_pool_rate(const Brain *brain, int pool_index);
 int    brain_pool_count(void);  /* retorna NPOOLS */
+bool   brain_pool_info(const Brain *brain, int pool_index, BrainPoolInfo *out);
+uint32_t brain_synapse_count(const Brain *brain);
 
 #endif /* PESTINHA_NEURO_H */

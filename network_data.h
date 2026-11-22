@@ -35,7 +35,7 @@ typedef struct {
     double density;
 } ConnDef;
 
-/* Definition of 64 Sensory Channels */
+/* Perfil-base de 64 canais sensoriais; brain_create aplica PESTINHA_NEURON_SCALE. */
 static const SensoryPoolDef SENS_POOLS[PESTINHA_CHANNELS] = {
     {"TYPING", 8, 30.0, 0.15, 20.0},
     {"KEY_FAST", 8, 40.0, 0.20, 15.0},
@@ -106,7 +106,7 @@ static const SensoryPoolDef SENS_POOLS[PESTINHA_CHANNELS] = {
     {"REWARD_WAIT", 8, 22.0, 0.09, 25.0}
 };
 
-/* Definition of 32 Interneuron Pools (576 neurons total) */
+/* 32 grupos associativos e de regulação; os tamanhos são escalados em runtime. */
 static const InterPoolDef INTER_POOLS[PESTINHA_INTERNEURONS] = {
     {"ALERT", 36, "exc", 20.0, 0.05, 100.0},
     {"CURIOUS", 36, "exc", 22.0, 0.04, 120.0},
@@ -137,12 +137,12 @@ static const InterPoolDef INTER_POOLS[PESTINHA_INTERNEURONS] = {
     {"COMFORT_POOL", 36, "exc", 27.0, 0.03, 150.0},
     {"ENERGY_CONSERVE", 36, "exc", 35.0, 0.02, 210.0},
     {"HABITUATION_POOL", 36, "inh", 28.0, 0.03, 160.0},
-    {"PLASTIC_NODE1", 36, "exc", 20.0, 0.05, 100.0},
-    {"PLASTIC_NODE2", 36, "exc", 20.0, 0.05, 100.0},
+    {"CONTEXT_BINDING", 36, "exc", 28.0, 0.03, 160.0},
+    {"UNCERTAINTY_MONITOR", 36, "exc", 16.0, 0.07, 80.0},
     {"EXECUTIVE_CTRL", 36, "exc", 18.0, 0.06, 90.0}
 };
 
-/* Definition of 24 Motor Pools (192 neurons total) */
+/* 24 grupos motores; os tamanhos são escalados em runtime. */
 static const MotorPoolDef MOTOR_POOLS[PESTINHA_MOTORS] = {
     {"FACE_HAPPY", 16, 20.0, 0.05, 100.0},
     {"FACE_SAD", 16, 25.0, 0.04, 120.0},
@@ -175,6 +175,11 @@ static const ConnDef DEFAULT_CONNS[] = {
     /* ═══ Sensores de Digitação/Teclas → Interneurônios ═══ */
     {"TYPING",         "ALERT",          0.45, 0.35},
     {"TYPING",         "FOCUS_POOL",     0.40, 0.30},
+    {"BACKSPACE",      "FOCUS_POOL",     0.20, 0.18},
+    {"DELETE",         "FOCUS_POOL",     0.20, 0.18},
+    {"TAB",            "CONTEXT_BINDING",0.32, 0.25},
+    {"SYMBOL",         "COGNITIVE_HIGH", 0.20, 0.18},
+    {"PUNCTUATION",    "COGNITIVE_HIGH", 0.18, 0.16},
     {"KEY_FAST",       "HYPERACTIVE",    0.50, 0.40},
     {"KEY_FAST",       "ALERT",          0.35, 0.30},
     {"KEY_SLOW",       "CALM",           0.30, 0.25},
@@ -189,7 +194,7 @@ static const ConnDef DEFAULT_CONNS[] = {
     {"ARROW",          "CURIOUS",        0.35, 0.30},
     {"ALPHANUM",       "FOCUS_POOL",     0.30, 0.25},
     {"BURST_INPUT",    "HYPERACTIVE",    0.55, 0.45},
-    {"BURST_INPUT",    "FRUSTRATED",     0.40, 0.30},
+    {"BURST_INPUT",    "FRUSTRATION",    0.40, 0.30},
 
     /* ═══ Sensores de Interação Direta → Interneurônios ═══ */
     {"CARESS",         "PLAYFUL",        0.60, 0.50},
@@ -254,6 +259,11 @@ static const ConnDef DEFAULT_CONNS[] = {
     {"CIRCADIAN_PEAK", "COGNITIVE_HIGH", 0.35, 0.30},
     {"CIRCADIAN_LOW",  "SLEEPY",         0.40, 0.35},
     {"CIRCADIAN_LOW",  "ENERGY_CONSERVE",0.35, 0.30},
+    {"CPU_LOAD",       "ENERGY_CONSERVE",0.35, 0.28},
+    {"CPU_LOAD",       "COGNITIVE_LOW",  0.22, 0.18},
+    {"TEMP_WARM",      "ALERT",          0.28, 0.22},
+    {"TEMP_WARM",      "ENERGY_CONSERVE",0.32, 0.26},
+    {"TEMP_COLD",      "CALM",           0.18, 0.16},
 
     /* ═══ Sensores Interoceptivos → Interneurônios ═══ */
     {"FATIGUE_PULSE",  "SLEEPY",         0.55, 0.45},
@@ -284,8 +294,10 @@ static const ConnDef DEFAULT_CONNS[] = {
     {"ENDORPHIN",      "SATISFIED",      0.40, 0.35},
     {"ENDORPHIN",      "PLAYFUL",        0.35, 0.30},
     {"MEMORY_TRACE",   "MEMORY_HOLD",    0.50, 0.45},
-    {"STDP_SPIKE",     "PLASTIC_NODE1",  0.45, 0.40},
-    {"STDP_SPIKE",     "PLASTIC_NODE2",  0.45, 0.40},
+    {"MEMORY_TRACE",   "CONTEXT_BINDING",0.50, 0.42},
+    {"STDP_SPIKE",     "UNCERTAINTY_MONITOR", 0.45, 0.40},
+    {"FOCUS_ACTIVE",   "CONTEXT_BINDING",0.30, 0.24},
+    {"REWARD_WAIT",    "UNCERTAINTY_MONITOR", 0.25, 0.20},
     {"REWARD_WAIT",    "REWARD_EXPECT",  0.55, 0.50},
     {"REWARD_WAIT",    "CURIOUS",        0.35, 0.30},
 
@@ -299,7 +311,7 @@ static const ConnDef DEFAULT_CONNS[] = {
     {"CALM",           "PURR_EFFECT",    0.35, 0.30},
     {"SLEEPY",         "FACE_SLEEP",     0.65, 0.55},
     {"SLEEPY",         "SLEEP_ACTION",   0.70, 0.60},
-    {"FRUSTRATED",     "FACE_ANGRY",     0.55, 0.45},
+    {"FRUSTRATION",    "FACE_ANGRY",     0.55, 0.45},
     {"FRUSTRATION",    "FACE_ANGRY",     0.60, 0.50},
     {"FRUSTRATION",    "SHAKE_HEAD",     0.45, 0.40},
     {"GLOOM",          "FACE_SAD",       0.55, 0.45},
@@ -362,8 +374,10 @@ static const ConnDef DEFAULT_CONNS[] = {
     {"ENERGY_CONSERVE","SLEEP_ACTION",   0.45, 0.40},
     {"ENERGY_CONSERVE","FACE_SLEEP",     0.40, 0.35},
     {"MEMORY_HOLD",    "THINK_EMIT",     0.35, 0.30},
-    {"PLASTIC_NODE1",  "FACE_CURIOUS",   0.30, 0.25},
-    {"PLASTIC_NODE2",  "FACE_PLAYFUL",   0.30, 0.25},
+    {"CONTEXT_BINDING", "THINK_EMIT",     0.35, 0.30},
+    {"UNCERTAINTY_MONITOR", "FACE_CURIOUS", 0.30, 0.25},
+    {"UNCERTAINTY_MONITOR", "PLAYFUL",     -0.28, 0.22},
+    {"UNCERTAINTY_MONITOR", "HYPERACTIVE", -0.24, 0.20},
     {"EXECUTIVE_CTRL", "NOD_HEAD",       0.40, 0.35},
     {"EXECUTIVE_CTRL", "FACE_NEUTRAL",   0.35, 0.30},
 
