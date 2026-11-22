@@ -1,7 +1,7 @@
 # Carmin — plano de eventos e autonomia desktop
 
 **Origem:** plano enviado pelo usuário em 2026-11-22. As propostas deste arquivo são plano de trabalho, não evidência de recursos já validados.
-**Estado:** Fase 1 implementada e comparada em um host; validação numérica extensa e fases seguintes pendentes.
+**Estado:** Fase 1 implementada e comparada em um host; contratos isolados de eventos/Guard/fila/snapshot existem. Release v1.6.0 publicada; reorganização semântica desktop e execução autônoma não concluídas.
 
 ## 1. Atualização neural orientada a eventos
 
